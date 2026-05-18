@@ -10,3 +10,4 @@ pytesseract
 PyMuPDF
 rapidocr_onnxruntime
 easyocr
+mysql-connector-python

@@ -1,20 +1,156 @@
 import json
 import os
 import re
-import sqlite3
 import unicodedata
 from datetime import datetime
+from pathlib import Path
 
+import mysql.connector
+from mysql.connector import IntegrityError
 from werkzeug.security import generate_password_hash
 
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "users.db")
+BASE_DIR = Path(__file__).resolve().parent
+MYSQL_CONFIG_PATH = BASE_DIR / "mysql_config.json"
+_DATABASE_READY = False
+
+
+def _load_mysql_config():
+    config = {
+        "host": os.environ.get("MYSQL_HOST", "127.0.0.1"),
+        "port": int(os.environ.get("MYSQL_PORT", "3306")),
+        "user": os.environ.get("MYSQL_USER", "root"),
+        "password": os.environ.get("MYSQL_PASSWORD", ""),
+        "database": os.environ.get("MYSQL_DATABASE", "web1_v3"),
+    }
+
+    if MYSQL_CONFIG_PATH.exists():
+        with open(MYSQL_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            local_config = json.load(handle)
+        config.update({key: value for key, value in local_config.items() if value is not None})
+
+    for env_key, config_key in [
+        ("MYSQL_HOST", "host"),
+        ("MYSQL_PORT", "port"),
+        ("MYSQL_USER", "user"),
+        ("MYSQL_PASSWORD", "password"),
+        ("MYSQL_DATABASE", "database"),
+    ]:
+        if os.environ.get(env_key):
+            config[config_key] = os.environ[env_key]
+
+    config["port"] = int(config["port"])
+    return config
+
+
+MYSQL_CONFIG = _load_mysql_config()
+
+
+def _quote_identifier(identifier):
+    if not re.fullmatch(r"[A-Za-z0-9_]+", identifier or ""):
+        raise ValueError(f"Unsafe MySQL identifier: {identifier}")
+    return f"`{identifier}`"
+
+
+def _mysql_query(query):
+    return query.replace("?", "%s")
+
+
+def _normalize_params(params):
+    if params is None:
+        return None
+    if isinstance(params, list):
+        return tuple(params)
+    return params
+
+
+class MySQLCursor:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, query, params=None):
+        self._cursor.execute(_mysql_query(query), _normalize_params(params))
+        return self
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    @property
+    def lastrowid(self):
+        return self._cursor.lastrowid
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    def close(self):
+        self._cursor.close()
+
+    def __iter__(self):
+        return iter(self._cursor)
+
+
+class MySQLConnection:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def cursor(self):
+        return MySQLCursor(self._connection.cursor(dictionary=True, buffered=True))
+
+    def execute(self, query, params=None):
+        cursor = self.cursor()
+        return cursor.execute(query, params)
+
+    def commit(self):
+        self._connection.commit()
+
+    def rollback(self):
+        self._connection.rollback()
+
+    def close(self):
+        self._connection.close()
+
+
+def _connect(database=True):
+    options = {
+        "host": MYSQL_CONFIG["host"],
+        "port": MYSQL_CONFIG["port"],
+        "user": MYSQL_CONFIG["user"],
+        "password": MYSQL_CONFIG["password"],
+        "charset": "utf8mb4",
+        "collation": "utf8mb4_unicode_ci",
+        "use_unicode": True,
+        "autocommit": False,
+    }
+    if database:
+        options["database"] = MYSQL_CONFIG["database"]
+    return mysql.connector.connect(**options)
+
+
+def _ensure_database():
+    global _DATABASE_READY
+    if _DATABASE_READY:
+        return
+
+    database_name = _quote_identifier(MYSQL_CONFIG["database"])
+    conn = _connect(database=False)
+    cursor = conn.cursor()
+    cursor.execute(
+        f"CREATE DATABASE IF NOT EXISTS {database_name} "
+        "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+    _DATABASE_READY = True
 
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    _ensure_database()
+    return MySQLConnection(_connect(database=True))
 
 
 def _normalize_student_id(value):
@@ -162,13 +298,16 @@ def _match_existing_student(conn, student_id="", name="", grade="", department="
 
 
 def _table_columns(conn, table_name):
-    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
-    return {row["name"] for row in rows}
+    rows = conn.execute(f"SHOW COLUMNS FROM {_quote_identifier(table_name)}").fetchall()
+    return {row["Field"] for row in rows}
 
 
 def _ensure_column(conn, table_name, column_name, definition):
     if column_name not in _table_columns(conn, table_name):
-        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+        conn.execute(
+            f"ALTER TABLE {_quote_identifier(table_name)} "
+            f"ADD COLUMN {_quote_identifier(column_name)} {definition}"
+        )
 
 
 def init_db():
@@ -178,93 +317,110 @@ def init_db():
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            student_id TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            name TEXT NOT NULL,
-            grade TEXT,
-            gender TEXT,
-            email TEXT,
-            role TEXT DEFAULT 'user'
-        )
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            student_id VARCHAR(64) UNIQUE NOT NULL,
+            password VARCHAR(255) NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            grade VARCHAR(64),
+            gender VARCHAR(64),
+            email VARCHAR(255),
+            role VARCHAR(32) DEFAULT 'user',
+            department VARCHAR(255),
+            auto_created TINYINT DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
 
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS omr_templates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            source_filename TEXT NOT NULL,
-            preview_image TEXT NOT NULL,
-            page_width INTEGER NOT NULL,
-            page_height INTEGER NOT NULL,
-            config_json TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(255) UNIQUE NOT NULL,
+            source_filename VARCHAR(512) NOT NULL,
+            preview_image VARCHAR(512) NOT NULL,
+            page_width INT NOT NULL,
+            page_height INT NOT NULL,
+            config_json LONGTEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
 
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS exams (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            template_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            template_id INT NOT NULL,
+            title VARCHAR(255) NOT NULL,
             description TEXT,
-            question_count INTEGER NOT NULL,
-            answer_key_json TEXT NOT NULL,
-            active INTEGER DEFAULT 1,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            question_count INT NOT NULL,
+            answer_key_json LONGTEXT NOT NULL,
+            active TINYINT DEFAULT 1,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             FOREIGN KEY(template_id) REFERENCES omr_templates(id)
-        )
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
 
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS recognition_records (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            subject TEXT,
-            name TEXT,
-            student_id TEXT,
-            grade TEXT,
-            class_name TEXT,
-            total INTEGER,
-            correct INTEGER,
-            wrong INTEGER,
-            unanswered INTEGER,
-            score REAL,
-            objective_score INTEGER DEFAULT 0,
-            total_score REAL DEFAULT 0,
-            original_image TEXT,
-            annotated_image TEXT,
-            cropped_choice_image TEXT,
-            sa_images TEXT,
-            sa_result TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            user_id INT,
+            subject VARCHAR(255),
+            name VARCHAR(255),
+            student_id VARCHAR(64),
+            grade VARCHAR(64),
+            class_name VARCHAR(128),
+            total INT,
+            correct INT,
+            wrong INT,
+            unanswered INT,
+            score DOUBLE,
+            objective_score DOUBLE DEFAULT 0,
+            total_score DOUBLE DEFAULT 0,
+            original_image VARCHAR(512),
+            annotated_image VARCHAR(512),
+            cropped_choice_image VARCHAR(512),
+            sa_images LONGTEXT,
+            sa_result LONGTEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            exam_id INT,
+            template_id INT,
+            student_user_id INT,
+            department VARCHAR(255),
+            answers_json LONGTEXT,
+            ocr_json LONGTEXT,
+            source_filename VARCHAR(512),
+            source_kind VARCHAR(32) DEFAULT 'image',
+            source_hash VARCHAR(128),
+            exam_title VARCHAR(255),
+            template_name VARCHAR(255),
+            INDEX idx_records_exam_student (exam_id, student_id),
+            INDEX idx_records_student_user (student_user_id),
+            INDEX idx_records_source_hash (source_hash)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         """
     )
 
-    _ensure_column(conn, "users", "department", "TEXT")
-    _ensure_column(conn, "users", "auto_created", "INTEGER DEFAULT 0")
-    _ensure_column(conn, "users", "created_at", "TIMESTAMP")
+    _ensure_column(conn, "users", "department", "VARCHAR(255)")
+    _ensure_column(conn, "users", "auto_created", "TINYINT DEFAULT 0")
+    _ensure_column(conn, "users", "created_at", "DATETIME DEFAULT CURRENT_TIMESTAMP")
 
-    _ensure_column(conn, "recognition_records", "exam_id", "INTEGER")
-    _ensure_column(conn, "recognition_records", "template_id", "INTEGER")
-    _ensure_column(conn, "recognition_records", "student_user_id", "INTEGER")
-    _ensure_column(conn, "recognition_records", "department", "TEXT")
-    _ensure_column(conn, "recognition_records", "answers_json", "TEXT")
-    _ensure_column(conn, "recognition_records", "ocr_json", "TEXT")
-    _ensure_column(conn, "recognition_records", "source_filename", "TEXT")
-    _ensure_column(conn, "recognition_records", "source_kind", "TEXT DEFAULT 'image'")
-    _ensure_column(conn, "recognition_records", "source_hash", "TEXT")
-    _ensure_column(conn, "recognition_records", "exam_title", "TEXT")
-    _ensure_column(conn, "recognition_records", "template_name", "TEXT")
+    _ensure_column(conn, "recognition_records", "exam_id", "INT")
+    _ensure_column(conn, "recognition_records", "template_id", "INT")
+    _ensure_column(conn, "recognition_records", "student_user_id", "INT")
+    _ensure_column(conn, "recognition_records", "department", "VARCHAR(255)")
+    _ensure_column(conn, "recognition_records", "answers_json", "LONGTEXT")
+    _ensure_column(conn, "recognition_records", "ocr_json", "LONGTEXT")
+    _ensure_column(conn, "recognition_records", "source_filename", "VARCHAR(512)")
+    _ensure_column(conn, "recognition_records", "source_kind", "VARCHAR(32) DEFAULT 'image'")
+    _ensure_column(conn, "recognition_records", "source_hash", "VARCHAR(128)")
+    _ensure_column(conn, "recognition_records", "exam_title", "VARCHAR(255)")
+    _ensure_column(conn, "recognition_records", "template_name", "VARCHAR(255)")
     cursor.execute('SELECT 1 FROM users WHERE student_id = ?', ("admin001",))
     if not cursor.fetchone():
         cursor.execute(
@@ -336,7 +492,7 @@ def create_user(
         )
         conn.commit()
         return True
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return False
     finally:
         conn.close()
@@ -1022,7 +1178,14 @@ def get_exam_summary(exam_id):
 
 
 def serialize_rows(rows):
-    return [dict(row) for row in rows]
+    serialized = []
+    for row in rows:
+        item = dict(row)
+        for key, value in item.items():
+            if isinstance(value, datetime):
+                item[key] = value.strftime("%Y-%m-%d %H:%M:%S")
+        serialized.append(item)
+    return serialized
 
 
 def parse_json_field(row, key, default):
@@ -1039,6 +1202,8 @@ def format_record_timestamp(row):
     raw = row["created_at"]
     if not raw:
         return ""
+    if isinstance(raw, datetime):
+        return raw.strftime("%Y-%m-%d %H:%M")
     try:
         return datetime.strptime(raw, "%Y-%m-%d %H:%M:%S").strftime("%Y-%m-%d %H:%M")
     except ValueError:
