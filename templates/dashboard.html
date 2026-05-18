@@ -1,0 +1,679 @@
+{% extends "index.html" %}
+
+{% block page_title %}시험 및 OMR 양식 관리{% endblock %}
+{% block page_subtitle %}A4 기준으로 OMR 양식을 만들고, 문항이 많으면 자동으로 여러 페이지로 나누어 생성합니다.{% endblock %}
+
+{% block content %}
+{% set layout = edit_exam.layout if edit_exam else {
+    'objective_area': {'x': 6, 'y': 25, 'w': 88, 'h': 49},
+    'subjective_area': {'x': 6, 'y': 76, 'w': 88, 'h': 17},
+    'subjective_box_height': 44
+} %}
+<style>
+    .layout {
+        display: grid;
+        grid-template-columns: minmax(380px, 0.9fr) minmax(520px, 1.5fr);
+        gap: 18px;
+        align-items: start;
+    }
+
+    .panel {
+        padding: 22px;
+        border-radius: 8px;
+    }
+
+    .panel h3 {
+        margin: 0 0 14px;
+        font-size: 19px;
+        font-weight: 800;
+    }
+
+    .form-grid, .control-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 13px;
+    }
+
+    .full {
+        grid-column: 1 / -1;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 7px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #24364a;
+    }
+
+    input, select, textarea {
+        width: 100%;
+        border: 1px solid #d4dfeb;
+        border-radius: 8px;
+        padding: 11px 12px;
+        font-size: 14px;
+        background: #fff;
+    }
+
+    input[type="range"] {
+        padding: 0;
+    }
+
+    textarea {
+        min-height: 96px;
+        resize: vertical;
+        font-family: inherit;
+    }
+
+    .note {
+        color: #627486;
+        font-size: 12px;
+        line-height: 1.45;
+        margin-top: 7px;
+    }
+
+    .section-title {
+        margin: 18px 0 10px;
+        padding-top: 15px;
+        border-top: 1px solid #e5eef6;
+        color: #15202b;
+        font-weight: 800;
+    }
+
+    .range-label {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 6px;
+        font-size: 12px;
+        color: #4f6173;
+        font-weight: 700;
+    }
+
+    .range-label output {
+        color: #165dff;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+    }
+
+    .btn-main, .btn-sub {
+        border: none;
+        border-radius: 8px;
+        padding: 11px 15px;
+        font-weight: 700;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .btn-main {
+        background: #165dff;
+        color: #fff;
+    }
+
+    .btn-sub {
+        background: #eef4fb;
+        color: #17385d;
+    }
+
+    .preview-shell {
+        max-height: 82vh;
+        overflow: auto;
+        background: #eef3f8;
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid #dbe6f0;
+    }
+
+    .preview-pages {
+        display: grid;
+        gap: 18px;
+        justify-items: center;
+    }
+
+    .omr-page {
+        width: min(100%, 620px);
+        aspect-ratio: 210 / 297;
+        position: relative;
+        background: #fff;
+        border: 1px solid #ccd8e4;
+        box-shadow: 0 10px 24px rgba(25, 52, 84, 0.12);
+        color: #101820;
+        overflow: hidden;
+        font-size: 10px;
+    }
+
+    .omr-title {
+        position: absolute;
+        top: 4.2%;
+        left: 6%;
+        width: 88%;
+        text-align: center;
+        font-size: 18px;
+        font-weight: 800;
+        line-height: 1.25;
+    }
+
+    .omr-meta {
+        position: absolute;
+        top: 8.2%;
+        left: 6%;
+        width: 88%;
+        text-align: center;
+        color: #627486;
+        font-size: 9px;
+    }
+
+    .student-row {
+        position: absolute;
+        top: 11.8%;
+        left: 6%;
+        width: 88%;
+        display: grid;
+        grid-template-columns: 1.2fr 1.2fr 0.7fr 1.6fr;
+        gap: 6px;
+    }
+
+    .student-box {
+        border: 1px solid #1f2937;
+        min-height: 30px;
+        padding: 5px;
+        color: #4b5563;
+        font-weight: 700;
+    }
+
+    .area-box {
+        position: absolute;
+        border: 1px solid #cbd5e1;
+        padding: 18px 8px 8px;
+        overflow: hidden;
+    }
+
+    .area-box .area-label {
+        position: absolute;
+        top: 4px;
+        left: 8px;
+        font-weight: 800;
+        color: #111827;
+        font-size: 10px;
+    }
+
+    .objective-columns, .subjective-columns {
+        display: grid;
+        gap: 6px 14px;
+        height: 100%;
+        min-height: 0;
+    }
+
+    .objective-column, .subjective-column {
+        display: grid;
+        gap: 3px;
+        min-height: 0;
+    }
+
+    .question-row {
+        display: grid;
+        grid-template-columns: 25px 1fr;
+        align-items: center;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .question-no {
+        text-align: right;
+        padding-right: 6px;
+        font-weight: 700;
+        font-size: 9px;
+    }
+
+    .bubble-line {
+        display: flex;
+        gap: 5px;
+        align-items: center;
+        flex-wrap: nowrap;
+        min-width: 0;
+    }
+
+    .bubble {
+        width: 10px;
+        height: 10px;
+        border: 1.3px solid #111827;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 6px;
+        line-height: 1;
+    }
+
+    .subjective-box {
+        border: 1px solid #8a98a8;
+        min-height: 0;
+        padding: 5px;
+        color: #4b5563;
+        font-weight: 700;
+        font-size: 9px;
+        overflow: hidden;
+    }
+
+    .page-foot {
+        position: absolute;
+        bottom: 3%;
+        left: 6%;
+        width: 88%;
+        color: #6b7280;
+        font-size: 8px;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .exam-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+    }
+
+    .exam-card {
+        border: 1px solid #dbe6f0;
+        background: #fff;
+        border-radius: 8px;
+        padding: 16px;
+        display: grid;
+        gap: 10px;
+    }
+
+    .exam-card h4 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 800;
+    }
+
+    .tag {
+        display: inline-flex;
+        width: fit-content;
+        padding: 4px 8px;
+        border-radius: 999px;
+        background: #edf4ff;
+        color: #165dff;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .tag.off {
+        background: #f1f4f7;
+        color: #627486;
+    }
+
+    .exam-info {
+        display: grid;
+        gap: 5px;
+        color: #4f6173;
+        font-size: 13px;
+    }
+
+    .exam-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    @media (max-width: 1180px) {
+        .layout {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 680px) {
+        .form-grid, .control-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+{% macro range_control(name, label, value, min_value, max_value) -%}
+<label class="range-label" for="{{ name }}"><span>{{ label }}</span><output for="{{ name }}" id="{{ name }}_out">{{ value }}</output></label>
+<input class="layout-range" id="{{ name }}" name="{{ name }}" type="range" min="{{ min_value }}" max="{{ max_value }}" step="1" value="{{ value }}">
+{%- endmacro %}
+
+<div class="layout">
+    <section class="card-panel panel">
+        <h3>{{ '시험/양식 수정' if edit_exam else '새 시험과 OMR 양식 만들기' }}</h3>
+        <form method="post" action="{{ url_for('save_exam') }}" id="examForm">
+            <input type="hidden" name="exam_id" value="{{ edit_exam.id if edit_exam else '' }}">
+            <input type="hidden" name="question_count" id="question_count" value="{{ edit_exam.objective_count if edit_exam else 20 }}">
+
+            <div class="form-grid">
+                <div class="full">
+                    <label for="title">OMR 시험지 제목</label>
+                    <input id="title" name="title" type="text" value="{{ edit_exam.title if edit_exam else '' }}" placeholder="예: 2026 종합설계 중간고사" required>
+                </div>
+                <div class="full">
+                    <label for="description">관리용 설명</label>
+                    <input id="description" name="description" type="text" value="{{ edit_exam.description if edit_exam else '' }}" placeholder="선택 사항">
+                </div>
+                <div>
+                    <label for="objective_count">객관식 문항 수</label>
+                    <input id="objective_count" name="objective_count" type="number" min="1" max="300" value="{{ edit_exam.objective_count if edit_exam else 20 }}" required>
+                </div>
+                <div>
+                    <label for="subjective_count">주관식 문항 수</label>
+                    <input id="subjective_count" name="subjective_count" type="number" min="0" max="200" value="{{ edit_exam.subjective_count if edit_exam else 10 }}">
+                </div>
+                <div>
+                    <label for="option_mode">선택항 표기</label>
+                    <select id="option_mode" name="option_mode">
+                        <option value="numeric" {% if not edit_exam or edit_exam.option_mode == 'numeric' %}selected{% endif %}>1, 2, 3...</option>
+                        <option value="alpha" {% if edit_exam and edit_exam.option_mode == 'alpha' %}selected{% endif %}>A, B, C...</option>
+                        <option value="custom" {% if edit_exam and edit_exam.option_mode == 'custom' %}selected{% endif %}>직접 입력</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="option_count">선택항 개수</label>
+                    <input id="option_count" name="option_count" type="number" min="2" max="10" value="{{ edit_exam.option_count if edit_exam else 5 }}">
+                </div>
+                <div class="full" id="customOptionsWrap">
+                    <label for="custom_options">직접 선택항</label>
+                    <input id="custom_options" name="custom_options" type="text" value="{{ edit_exam.option_labels_text if edit_exam and edit_exam.option_mode == 'custom' else '' }}" placeholder="예: 가,나,다,라 또는 T,F">
+                    <div class="note">쉼표나 공백으로 구분합니다. 직접 입력 시 선택항 개수보다 직접 입력값을 우선 사용합니다.</div>
+                </div>
+                <div class="full">
+                    <label for="answer_key">객관식 정답</label>
+                    <textarea id="answer_key" name="answer_key" placeholder="예: 1,2,3,4,5 또는 A,B,C,D,E">{{ edit_exam.answer_key_text if edit_exam else '' }}</textarea>
+                    <div class="note">정답 개수는 객관식 문항 수와 같아야 합니다. 문항이 A4 한 페이지에 들어가지 않으면 PDF가 자동으로 다음 페이지를 추가합니다.</div>
+                </div>
+                <div class="full">
+                    <label style="display:flex; align-items:center; gap:9px; margin:0;">
+                        <input type="checkbox" name="active" {% if not edit_exam or edit_exam.active %}checked{% endif %} style="width:auto;">
+                        활성 시험으로 사용
+                    </label>
+                </div>
+            </div>
+
+            <div class="section-title">객관식 답란 위치/크기</div>
+            <div class="control-grid">
+                <div>{{ range_control('objective_x', '왼쪽', layout.objective_area.x, 0, 80) }}</div>
+                <div>{{ range_control('objective_y', '위쪽', layout.objective_area.y, 12, 88) }}</div>
+                <div>{{ range_control('objective_w', '너비', layout.objective_area.w, 20, 96) }}</div>
+                <div>{{ range_control('objective_h', '높이', layout.objective_area.h, 10, 70) }}</div>
+            </div>
+
+            <div class="section-title">주관식 답란 위치/크기</div>
+            <div class="control-grid">
+                <div>{{ range_control('subjective_x', '왼쪽', layout.subjective_area.x, 0, 80) }}</div>
+                <div>{{ range_control('subjective_y', '위쪽', layout.subjective_area.y, 18, 94) }}</div>
+                <div>{{ range_control('subjective_w', '너비', layout.subjective_area.w, 20, 96) }}</div>
+                <div>{{ range_control('subjective_h', '높이', layout.subjective_area.h, 8, 70) }}</div>
+                <div class="full">{{ range_control('subjective_box_height', '주관식 개별 답란 높이', layout.subjective_box_height, 24, 96) }}</div>
+            </div>
+
+            <div class="actions">
+                <button class="btn-main" type="submit">
+                    <i class="fa fa-save"></i>{{ '수정 및 PDF 재생성' if edit_exam else '시험 저장 및 PDF 생성' }}
+                </button>
+                {% if edit_exam %}
+                <a class="btn-sub" href="{{ url_for('dashboard') }}"><i class="fa fa-undo"></i>새 시험 입력</a>
+                {% endif %}
+            </div>
+        </form>
+    </section>
+
+    <section class="card-panel panel">
+        <h3>실시간 양식 미리보기</h3>
+        <div class="note" id="pageSummary" style="margin:0 0 10px;"></div>
+        <div class="preview-shell">
+            <div class="preview-pages" id="previewPages"></div>
+        </div>
+    </section>
+</div>
+
+<section class="card-panel panel" style="margin-top:18px;">
+    <h3>등록된 시험</h3>
+    {% if exams %}
+    <div class="exam-grid">
+        {% for exam in exams %}
+        <article class="exam-card">
+            <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+                <h4>{{ exam.title }}</h4>
+                <span class="tag {% if not exam.active %}off{% endif %}">{{ '활성' if exam.active else '비활성' }}</span>
+            </div>
+            <div class="exam-info">
+                <div><strong>페이지:</strong> {{ exam.page_count }}쪽</div>
+                <div><strong>객관식:</strong> {{ exam.objective_count }}문항</div>
+                <div><strong>주관식:</strong> {{ exam.subjective_count }}문항</div>
+                <div><strong>선택항:</strong> {{ exam.option_labels_text }}</div>
+                <div><strong>정답:</strong> {{ exam.answer_key_preview }}</div>
+                {% if exam.description %}<div><strong>설명:</strong> {{ exam.description }}</div>{% endif %}
+            </div>
+            <div class="exam-actions">
+                <a class="btn-main" href="{{ url_for('exam_page', exam_id=exam.id) }}"><i class="fa fa-upload"></i>채점 시작</a>
+                <a class="btn-sub" href="{{ url_for('dashboard', edit_exam=exam.id) }}"><i class="fa fa-pencil"></i>수정</a>
+                <a class="btn-sub" href="{{ url_for('download_template_pdf', template_id=exam.template_id) }}"><i class="fa fa-file-pdf-o"></i>양식 PDF</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="note" style="margin:0;">아직 등록된 시험이 없습니다. 위 설정을 입력해 첫 OMR 양식을 생성하세요.</p>
+    {% endif %}
+</section>
+
+<script>
+    const titleInput = document.getElementById('title');
+    const objectiveInput = document.getElementById('objective_count');
+    const subjectiveInput = document.getElementById('subjective_count');
+    const optionModeInput = document.getElementById('option_mode');
+    const optionCountInput = document.getElementById('option_count');
+    const customOptionsInput = document.getElementById('custom_options');
+    const customOptionsWrap = document.getElementById('customOptionsWrap');
+    const answerKeyInput = document.getElementById('answer_key');
+    const questionCountInput = document.getElementById('question_count');
+    const previewPages = document.getElementById('previewPages');
+    const pageSummary = document.getElementById('pageSummary');
+    const layoutInputs = Array.from(document.querySelectorAll('.layout-range'));
+
+    function clampNumber(value, min, max, fallback) {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) return fallback;
+        return Math.max(min, Math.min(max, Math.floor(parsed)));
+    }
+
+    function getOptionLabels() {
+        const count = clampNumber(optionCountInput.value, 2, 10, 5);
+        const mode = optionModeInput.value;
+        if (mode === 'alpha') {
+            return Array.from({ length: count }, (_, index) => String.fromCharCode(65 + index));
+        }
+        if (mode === 'custom') {
+            const labels = customOptionsInput.value
+                .split(/[,\s;/|]+/)
+                .map(item => item.trim().toUpperCase())
+                .filter(Boolean)
+                .slice(0, 10);
+            if (labels.length >= 2) return labels;
+        }
+        return Array.from({ length: count }, (_, index) => String(index + 1));
+    }
+
+    function area(prefix) {
+        return {
+            x: Number(document.getElementById(`${prefix}_x`).value),
+            y: Number(document.getElementById(`${prefix}_y`).value),
+            w: Number(document.getElementById(`${prefix}_w`).value),
+            h: Number(document.getElementById(`${prefix}_h`).value)
+        };
+    }
+
+    function objectiveCapacity(areaData) {
+        const widthPt = 595 * areaData.w / 100;
+        const heightPt = 842 * areaData.h / 100;
+        const columns = widthPt >= 360 ? 2 : 1;
+        const rows = Math.max(1, Math.floor(Math.max(1, heightPt - 30) / 17.5));
+        return { capacity: rows * columns, columns, rows };
+    }
+
+    function subjectiveCapacity(areaData, boxHeight) {
+        const widthPt = 595 * areaData.w / 100;
+        const heightPt = 842 * areaData.h / 100;
+        const columns = widthPt >= 360 ? 2 : 1;
+        const rows = Math.max(1, Math.floor((Math.max(1, heightPt - 26) + 8) / (boxHeight + 8)));
+        return { capacity: rows * columns, columns, rows };
+    }
+
+    function syncAnswerKey(force = false) {
+        const objectiveCount = clampNumber(objectiveInput.value, 1, 300, 20);
+        questionCountInput.value = objectiveCount;
+        if (!force && answerKeyInput.value.trim()) return;
+        const firstOption = getOptionLabels()[0] || '1';
+        answerKeyInput.value = Array.from({ length: objectiveCount }, () => firstOption).join(',');
+    }
+
+    function questionRows(start, end, options) {
+        let html = '';
+        for (let question = start; question <= end; question += 1) {
+            html += `
+                <div class="question-row">
+                    <span class="question-no">${question}</span>
+                    <span class="bubble-line">${options.map(label => `<span class="bubble">${label}</span>`).join('')}</span>
+                </div>
+            `;
+        }
+        return html;
+    }
+
+    function objectiveColumns(start, end, options, info) {
+        if (start > end) return '';
+        const count = end - start + 1;
+        const perCol = Math.ceil(count / info.columns);
+        let html = '';
+        for (let col = 0; col < info.columns; col += 1) {
+            const colStart = start + col * perCol;
+            const colEnd = Math.min(end, colStart + perCol - 1);
+            html += `
+                <div class="objective-column" style="grid-template-rows: repeat(${info.rows}, minmax(0, 1fr));">
+                    ${colStart <= colEnd ? questionRows(colStart, colEnd, options) : ''}
+                </div>
+            `;
+        }
+        return html;
+    }
+
+    function subjectiveColumns(startIndex, endIndex, objectiveCount, info) {
+        if (startIndex > endIndex) return '';
+        const count = endIndex - startIndex + 1;
+        const perCol = Math.ceil(count / info.columns);
+        let html = '';
+        for (let col = 0; col < info.columns; col += 1) {
+            const colStart = startIndex + col * perCol;
+            const colEnd = Math.min(endIndex, colStart + perCol - 1);
+            let boxes = '';
+            for (let index = colStart; index <= colEnd; index += 1) {
+                boxes += `<div class="subjective-box">${objectiveCount + index + 1}번</div>`;
+            }
+            html += `
+                <div class="subjective-column" style="grid-template-rows: repeat(${info.rows}, minmax(0, 1fr));">
+                    ${boxes}
+                </div>
+            `;
+        }
+        return html;
+    }
+
+    function renderPreview() {
+        const title = titleInput.value.trim() || 'OMR 답안지';
+        const objectiveCount = clampNumber(objectiveInput.value, 1, 300, 20);
+        const subjectiveCount = clampNumber(subjectiveInput.value, 0, 200, 0);
+        const options = getOptionLabels();
+        const objectiveArea = area('objective');
+        const subjectiveArea = area('subjective');
+        const boxHeight = clampNumber(document.getElementById('subjective_box_height').value, 24, 96, 44);
+        const objectiveInfo = objectiveCapacity(objectiveArea);
+        const subjectiveInfo = subjectiveCapacity(subjectiveArea, boxHeight);
+        const objectivePages = Math.ceil(objectiveCount / objectiveInfo.capacity);
+        const subjectivePages = subjectiveCount ? Math.ceil(subjectiveCount / subjectiveInfo.capacity) : 0;
+        const pageCount = Math.max(1, objectivePages, subjectivePages);
+
+        customOptionsWrap.style.display = optionModeInput.value === 'custom' ? 'block' : 'none';
+        questionCountInput.value = objectiveCount;
+        pageSummary.textContent = `예상 페이지: ${pageCount}쪽 · 페이지당 객관식 최대 ${objectiveInfo.capacity}문항 · 페이지당 주관식 최대 ${subjectiveInfo.capacity}문항`;
+
+        const pages = [];
+        for (let page = 0; page < pageCount; page += 1) {
+            const objectiveStart = page * objectiveInfo.capacity + 1;
+            const objectiveEnd = Math.min(objectiveCount, (page + 1) * objectiveInfo.capacity);
+            const subjectiveStartIndex = page * subjectiveInfo.capacity;
+            const subjectiveEndIndex = Math.min(subjectiveCount - 1, (page + 1) * subjectiveInfo.capacity - 1);
+
+            const objectiveHtml = objectiveColumns(objectiveStart, objectiveEnd, options, objectiveInfo);
+            const subjectiveHtml = subjectiveColumns(subjectiveStartIndex, subjectiveEndIndex, objectiveCount, subjectiveInfo);
+
+            pages.push(`
+                <section class="omr-page">
+                    <div class="omr-title">${escapeHtml(title)}</div>
+                    <div class="omr-meta">${page + 1} / ${pageCount} 페이지 · 객관식 ${objectiveCount}문항 · 주관식 ${subjectiveCount}문항 · 선택항 ${options.join(', ')}</div>
+                    <div class="student-row">
+                        <div class="student-box">학과</div>
+                        <div class="student-box">학번</div>
+                        <div class="student-box">학년</div>
+                        <div class="student-box">이름</div>
+                    </div>
+                    <div class="area-box" style="left:${objectiveArea.x}%; top:${objectiveArea.y}%; width:${objectiveArea.w}%; height:${objectiveArea.h}%;">
+                        <div class="area-label">객관식 답란</div>
+                        <div class="objective-columns" style="grid-template-columns: repeat(${objectiveInfo.columns}, minmax(0, 1fr));">${objectiveHtml}</div>
+                    </div>
+                    <div class="area-box" style="left:${subjectiveArea.x}%; top:${subjectiveArea.y}%; width:${subjectiveArea.w}%; height:${subjectiveArea.h}%;">
+                        <div class="area-label">주관식 답란</div>
+                        <div class="subjective-columns" style="grid-template-columns: repeat(${subjectiveInfo.columns}, minmax(0, 1fr));">${subjectiveHtml}</div>
+                    </div>
+                    <div class="page-foot"><span>검은색 펜으로 진하게 표시하세요.</span><span>${page + 1}</span></div>
+                </section>
+            `);
+        }
+        previewPages.innerHTML = pages.join('');
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    [titleInput, objectiveInput, subjectiveInput, optionModeInput, optionCountInput, customOptionsInput, ...layoutInputs].forEach(input => {
+        input.addEventListener('input', () => {
+            if (input.tagName === 'INPUT' && input.type === 'range') {
+                const output = document.getElementById(`${input.id}_out`);
+                if (output) output.value = input.value;
+            }
+            renderPreview();
+        });
+        input.addEventListener('change', renderPreview);
+    });
+
+    objectiveInput.addEventListener('change', () => syncAnswerKey(false));
+    optionModeInput.addEventListener('change', () => syncAnswerKey(true));
+    optionCountInput.addEventListener('change', () => syncAnswerKey(true));
+    customOptionsInput.addEventListener('change', () => syncAnswerKey(true));
+
+    document.getElementById('examForm').addEventListener('submit', () => {
+        syncAnswerKey(!answerKeyInput.value.trim());
+    });
+
+    if (!answerKeyInput.value.trim()) {
+        syncAnswerKey(true);
+    }
+    renderPreview();
+</script>
+{% endblock %}

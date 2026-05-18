@@ -1,0 +1,12 @@
+Flask
+Flask-Login
+numpy
+opencv-python-headless
+Pillow
+pandas
+openpyxl
+reportlab
+pytesseract
+PyMuPDF
+rapidocr_onnxruntime
+easyocr

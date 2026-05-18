@@ -1,0 +1,228 @@
+{% extends "index.html" %}
+
+{% block page_title %}시험 통계{% endblock %}
+{% block page_subtitle %}과목 기준이 아니라 생성된 시험 단위로 채점 현황, 평균 점수, 시험 내 점수분포를 확인합니다.{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+    .stats-layout {
+        display: grid;
+        grid-template-columns: minmax(320px, 0.9fr) minmax(520px, 1.4fr);
+        gap: 18px;
+        align-items: start;
+    }
+
+    .panel {
+        padding: 20px;
+        border-radius: 8px;
+    }
+
+    .panel h3 {
+        margin: 0 0 12px;
+        font-size: 18px;
+        font-weight: 800;
+    }
+
+    .exam-list {
+        display: grid;
+        gap: 10px;
+    }
+
+    .exam-link {
+        display: grid;
+        gap: 6px;
+        padding: 12px;
+        border: 1px solid #dbe6f0;
+        border-radius: 8px;
+        text-decoration: none;
+        color: #15202b;
+        background: #fff;
+    }
+
+    .exam-link.active {
+        border-color: #165dff;
+        background: #f5f8ff;
+    }
+
+    .exam-link strong {
+        font-size: 14px;
+    }
+
+    .exam-link span {
+        color: #627486;
+        font-size: 12px;
+    }
+
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+
+    .summary-card {
+        border: 1px solid #dbe6f0;
+        border-radius: 8px;
+        background: #f8fbff;
+        padding: 13px;
+    }
+
+    .summary-card span {
+        display: block;
+        color: #627486;
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .summary-card strong {
+        font-size: 20px;
+        color: #15202b;
+    }
+
+    .chart-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .chart {
+        width: 100%;
+        height: 340px;
+    }
+
+    .empty {
+        border: 1px solid #dbe6f0;
+        border-radius: 8px;
+        background: #fff;
+        color: #627486;
+        padding: 42px 20px;
+        text-align: center;
+    }
+
+    @media (max-width: 1100px) {
+        .stats-layout, .chart-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+{% if stats %}
+<div class="stats-layout">
+    <section class="card-panel panel">
+        <h3>시험 목록</h3>
+        <div class="exam-list">
+            {% for exam in stats %}
+            <a class="exam-link {% if exam.exam_id == selected_exam_id %}active{% endif %}" href="{{ url_for('admin_stats', exam_id=exam.exam_id) }}">
+                <strong>{{ exam.exam_title }}</strong>
+                <span>{{ exam.count }}건 채점 · 평균 {{ exam.avg_score }}점 · 응시 {{ exam.student_count }}명</span>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="card-panel panel">
+        <h3>{{ selected_exam.exam_title if selected_exam else '선택된 시험' }}</h3>
+        <div class="summary-grid">
+            <div class="summary-card"><span>채점 건수</span><strong>{{ summary.count }}</strong></div>
+            <div class="summary-card"><span>응시 학생</span><strong>{{ summary.student_count }}</strong></div>
+            <div class="summary-card"><span>평균 총점</span><strong>{{ summary.avg_score }}</strong></div>
+            <div class="summary-card"><span>최고 / 최저</span><strong>{{ summary.max_score }} / {{ summary.min_score }}</strong></div>
+            <div class="summary-card"><span>평균 객관식</span><strong>{{ summary.avg_mc_score }}</strong></div>
+            <div class="summary-card"><span>평균 수동점수</span><strong>{{ summary.avg_manual_score }}</strong></div>
+            <div class="summary-card"><span>평균 미응답</span><strong>{{ summary.avg_unanswered }}</strong></div>
+        </div>
+
+        <div class="chart-grid">
+            <section>
+                <h3>시험 내 점수분포</h3>
+                <div id="distChart" class="chart"></div>
+            </section>
+            <section>
+                <h3>시험별 평균 비교</h3>
+                <div id="avgChart" class="chart"></div>
+            </section>
+            <section>
+                <h3>시험별 채점 건수</h3>
+                <div id="countChart" class="chart"></div>
+            </section>
+            <section>
+                <h3>최고/최저 점수 폭</h3>
+                <div id="rangeChart" class="chart"></div>
+            </section>
+        </div>
+    </section>
+</div>
+{% else %}
+<div class="empty">아직 채점된 시험 기록이 없습니다.</div>
+{% endif %}
+
+<script>
+    const stats = {{ stats|tojson|safe }};
+    const dist = {{ dist|tojson|safe }};
+
+    if (stats.length) {
+        const labels = stats.map(item => item.exam_title);
+        const counts = stats.map(item => item.count);
+        const avgs = stats.map(item => item.avg_score);
+
+        const distChart = echarts.init(document.getElementById('distChart'));
+        distChart.setOption({
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: Object.keys(dist) },
+            yAxis: { type: 'value', minInterval: 1 },
+            series: [{
+                type: 'bar',
+                data: Object.values(dist),
+                itemStyle: { color: '#165dff', borderRadius: [6, 6, 0, 0] }
+            }]
+        });
+
+        const avgChart = echarts.init(document.getElementById('avgChart'));
+        avgChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: 42, right: 18, bottom: 82, top: 28 },
+            xAxis: { type: 'category', data: labels, axisLabel: { rotate: 28 } },
+            yAxis: { type: 'value', max: 100 },
+            series: [{
+                type: 'bar',
+                data: avgs,
+                itemStyle: { color: '#0f9d58', borderRadius: [6, 6, 0, 0] }
+            }]
+        });
+
+        const countChart = echarts.init(document.getElementById('countChart'));
+        countChart.setOption({
+            tooltip: { trigger: 'axis' },
+            grid: { left: 42, right: 18, bottom: 82, top: 28 },
+            xAxis: { type: 'category', data: labels, axisLabel: { rotate: 28 } },
+            yAxis: { type: 'value', minInterval: 1 },
+            series: [{
+                type: 'bar',
+                data: counts,
+                itemStyle: { color: '#ff8f00', borderRadius: [6, 6, 0, 0] }
+            }]
+        });
+
+        const rangeChart = echarts.init(document.getElementById('rangeChart'));
+        rangeChart.setOption({
+            tooltip: { trigger: 'axis' },
+            legend: { top: 0 },
+            grid: { left: 42, right: 18, bottom: 82, top: 42 },
+            xAxis: { type: 'category', data: labels, axisLabel: { rotate: 28 } },
+            yAxis: { type: 'value', max: 100 },
+            series: [
+                { name: '최고', type: 'line', data: stats.map(item => item.max_score), smooth: true, itemStyle: { color: '#165dff' } },
+                { name: '최저', type: 'line', data: stats.map(item => item.min_score), smooth: true, itemStyle: { color: '#d93025' } }
+            ]
+        });
+
+        window.addEventListener('resize', () => {
+            distChart.resize();
+            avgChart.resize();
+            countChart.resize();
+            rangeChart.resize();
+        });
+    }
+</script>
+{% endblock %}

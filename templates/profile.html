@@ -1,0 +1,118 @@
+{% extends "index.html" %}
+
+{% block page_title %}내 정보{% endblock %}
+{% block page_subtitle %}학생 정보와 로그인 비밀번호를 관리합니다.{% endblock %}
+
+{% block content %}
+<style>
+    .layout {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 20px;
+    }
+
+    .panel {
+        padding: 22px;
+    }
+
+    h3 {
+        margin: 0 0 16px;
+        font-size: 20px;
+    }
+
+    .form-grid {
+        display: grid;
+        gap: 12px;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+        font-weight: 700;
+    }
+
+    input {
+        width: 100%;
+        border: 1px solid #d4dfeb;
+        border-radius: 14px;
+        padding: 12px 14px;
+        font-size: 14px;
+    }
+
+    .readonly {
+        background: #f7fbff;
+        color: #627486;
+    }
+
+    .btn-main {
+        border: none;
+        border-radius: 14px;
+        padding: 13px 18px;
+        background: linear-gradient(135deg, #165dff, #0c44c7);
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    @media (max-width: 960px) {
+        .layout {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="layout">
+    <section class="card-panel panel">
+        <h3>기본 정보</h3>
+        <form method="post" class="form-grid">
+            <input type="hidden" name="action" value="update_profile">
+            <div>
+                <label>학번</label>
+                <input class="readonly" value="{{ user.student_id }}" readonly>
+            </div>
+            <div>
+                <label for="name">이름</label>
+                <input id="name" name="name" value="{{ user.name or '' }}" required>
+            </div>
+            <div>
+                <label for="department">학과</label>
+                <input id="department" name="department" value="{{ user.department or '' }}">
+            </div>
+            <div>
+                <label for="grade">학년</label>
+                <input id="grade" name="grade" value="{{ user.grade or '' }}">
+            </div>
+            <div>
+                <label for="gender">성별</label>
+                <input id="gender" name="gender" value="{{ user.gender or '' }}">
+            </div>
+            <div>
+                <label for="email">이메일</label>
+                <input id="email" type="email" name="email" value="{{ user.email or '' }}">
+            </div>
+            <button class="btn-main" type="submit">기본 정보 저장</button>
+        </form>
+    </section>
+
+    <section class="card-panel panel">
+        <h3>비밀번호 변경</h3>
+        <form method="post" class="form-grid">
+            <input type="hidden" name="action" value="change_password">
+            <div>
+                <label for="current_password">현재 비밀번호</label>
+                <input id="current_password" type="password" name="current_password" required>
+            </div>
+            <div>
+                <label for="new_password">새 비밀번호</label>
+                <input id="new_password" type="password" name="new_password" required>
+            </div>
+            <div>
+                <label for="confirm_password">새 비밀번호 확인</label>
+                <input id="confirm_password" type="password" name="confirm_password" required>
+            </div>
+            <button class="btn-main" type="submit">비밀번호 저장</button>
+        </form>
+    </section>
+</div>
+{% endblock %}

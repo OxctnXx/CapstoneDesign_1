@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 성적 현황</title>
+    <style>
+        :root {
+            --bg: #f2f6fb;
+            --panel: #ffffff;
+            --line: #dbe6f0;
+            --text: #15202b;
+            --muted: #627486;
+            --brand: #165dff;
+            --brand-strong: #0c44c7;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+            background: radial-gradient(circle at top left, #ffffff 0, #eef4fa 42%, #e6eff8 100%);
+            color: var(--text);
+        }
+
+        .wrap {
+            max-width: 1160px;
+            margin: 0 auto;
+            padding: 28px 18px 40px;
+        }
+
+        .hero {
+            background: linear-gradient(135deg, #0f2c4e, #165dff);
+            color: #fff;
+            border-radius: 26px;
+            padding: 28px;
+            margin-bottom: 22px;
+            box-shadow: 0 18px 36px rgba(18, 53, 99, 0.2);
+        }
+
+        .hero h1 {
+            margin: 0 0 10px;
+            font-size: 30px;
+        }
+
+        .hero p {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.85);
+            line-height: 1.6;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+        }
+
+        .toolbar a {
+            text-decoration: none;
+            border-radius: 14px;
+            padding: 12px 16px;
+            font-weight: 700;
+        }
+
+        .btn-main {
+            background: linear-gradient(135deg, #165dff, #0c44c7);
+            color: #fff;
+        }
+
+        .btn-sub {
+            background: #eef4fb;
+            color: #17385d;
+        }
+
+        .grid {
+            display: grid;
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid rgba(219, 230, 240, 0.95);
+            border-radius: 22px;
+            padding: 20px;
+            box-shadow: 0 12px 28px rgba(23, 44, 71, 0.07);
+        }
+
+        .card-head {
+            display: flex;
+            justify-content: space-between;
+            gap: 14px;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .card-head h2 {
+            margin: 0 0 6px;
+            font-size: 21px;
+        }
+
+        .date {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .score-chip {
+            padding: 10px 14px;
+            border-radius: 999px;
+            background: #e8f0ff;
+            color: var(--brand);
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 10px;
+        }
+
+        .stat {
+            background: #f8fbff;
+            border: 1px solid #dfe9f3;
+            border-radius: 14px;
+            padding: 12px 14px;
+        }
+
+        .stat span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            margin-bottom: 5px;
+        }
+
+        .answers {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .answer {
+            border: 1px solid #dbe6f0;
+            border-radius: 12px;
+            padding: 8px;
+            text-align: center;
+            font-size: 13px;
+            background: #fff;
+        }
+
+        .answer strong {
+            display: block;
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 3px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .empty {
+            text-align: center;
+            color: var(--muted);
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            padding: 60px 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <section class="hero">
+        <h1>{{ user.name }}님의 성적 현황</h1>
+        <p>{{ user.department or '학과 정보 미입력' }} · {{ user.student_id }} · {{ user.grade or '학년 정보 미입력' }}</p>
+    </section>
+
+    <div class="toolbar">
+        <div></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <a class="btn-sub" href="{{ url_for('profile') }}">내 정보</a>
+            <a class="btn-main" href="{{ url_for('logout') }}">로그아웃</a>
+        </div>
+    </div>
+
+    {% if records %}
+    <div class="grid">
+        {% for record in records %}
+        <article class="card">
+            <div class="card-head">
+                <div>
+                    <h2>{{ record.exam_title or record.subject }}</h2>
+                    <div class="date">{{ record.created_at_display }}</div>
+                </div>
+                <div class="score-chip">총점 {{ record.total_score }}</div>
+            </div>
+
+            <div class="stats">
+                <div class="stat"><span>학과</span><strong>{{ record.ocr.fields.department or record.department or '-' }}</strong></div>
+                <div class="stat"><span>학번</span><strong>{{ record.ocr.fields.student_id or record.student_id or '-' }}</strong></div>
+                <div class="stat"><span>학년</span><strong>{{ record.ocr.fields.grade or record.grade or '-' }}</strong></div>
+                <div class="stat"><span>MC 점수</span><strong>{{ record.score }}</strong></div>
+                <div class="stat"><span>수동 점수</span><strong>{{ record.objective_score }}</strong></div>
+                <div class="stat"><span>정답 / 오답 / 미응답</span><strong>{{ record.correct }} / {{ record.wrong }} / {{ record.unanswered }}</strong></div>
+            </div>
+
+            <div class="answers">
+                {% for q, answer in record.answers|dictsort %}
+                <div class="answer">
+                    <strong>Q{{ q }}</strong>
+                    <span>{{ answer or '-' }}</span>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="actions">
+                <a class="btn-sub" href="{{ url_for('export_pdf', record_id=record.id) }}">PDF</a>
+                <a class="btn-sub" href="{{ url_for('export_single_xlsx', record_id=record.id) }}">XLSX</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">아직 조회 가능한 채점 기록이 없습니다.</div>
+    {% endif %}
+</div>
+</body>
+</html>

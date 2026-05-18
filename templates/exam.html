@@ -1,0 +1,823 @@
+{% extends "index.html" %}
+
+{% block page_title %}{{ exam.title }}{% endblock %}
+{% block page_subtitle %}학생 답안지 PDF 또는 이미지를 업로드하면 OMR을 인식하고, 중복 학생 답안지는 관리자가 선택해 저장합니다.{% endblock %}
+
+{% block content %}
+<style>
+    .page-grid {
+        display: grid;
+        grid-template-columns: 360px minmax(0, 1fr);
+        gap: 18px;
+        align-items: start;
+    }
+
+    .panel {
+        padding: 22px;
+        border-radius: 8px;
+    }
+
+    .upload-box {
+        border: 2px dashed #bdd1e4;
+        border-radius: 8px;
+        padding: 28px 18px;
+        background: #f7fbff;
+        text-align: center;
+        cursor: pointer;
+        transition: 0.18s ease;
+    }
+
+    .upload-box:hover {
+        border-color: #165dff;
+        background: #f2f7ff;
+    }
+
+    .upload-box h3 {
+        margin: 0 0 8px;
+        font-size: 19px;
+        font-weight: 800;
+    }
+
+    .upload-box p {
+        margin: 5px 0;
+        color: #627486;
+        line-height: 1.5;
+        font-size: 13px;
+    }
+
+    #fileInput {
+        display: none;
+    }
+
+    .btn-main, .btn-sub, .btn-danger {
+        border: none;
+        border-radius: 8px;
+        padding: 11px 15px;
+        font-weight: 700;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        cursor: pointer;
+    }
+
+    .btn-main {
+        background: #165dff;
+        color: #fff;
+    }
+
+    .btn-sub {
+        background: #eef4fb;
+        color: #17385d;
+    }
+
+    .btn-danger {
+        background: #fff1f0;
+        color: #a61d24;
+    }
+
+    .start-btn {
+        width: 100%;
+        margin-top: 14px;
+    }
+
+    .side-meta {
+        display: grid;
+        gap: 9px;
+        margin-top: 16px;
+    }
+
+    .meta-item {
+        border: 1px solid #dbe6f0;
+        border-radius: 8px;
+        background: #f8fbff;
+        padding: 11px 12px;
+        font-size: 13px;
+    }
+
+    .meta-item strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #24364a;
+    }
+
+    .preview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+        gap: 10px;
+        margin-top: 16px;
+    }
+
+    .preview-item {
+        border: 1px solid #dbe6f0;
+        border-radius: 8px;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    .preview-item img, .preview-item .pdf-box {
+        width: 100%;
+        aspect-ratio: 1;
+        object-fit: cover;
+        display: block;
+    }
+
+    .pdf-box {
+        background: #fff5f4;
+        color: #c5221f;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 30px;
+    }
+
+    .preview-name {
+        padding: 8px;
+        font-size: 12px;
+        color: #4f6173;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-bottom: 14px;
+    }
+
+    .status-bar {
+        border: 1px solid #dbe6f0;
+        border-radius: 8px;
+        background: #f8fbff;
+        padding: 12px 14px;
+        color: #35516c;
+        font-size: 13px;
+        flex: 1;
+        min-width: 260px;
+    }
+
+    .results {
+        display: grid;
+        gap: 14px;
+    }
+
+    .record-card {
+        border: 1px solid #dbe6f0;
+        border-radius: 8px;
+        padding: 16px;
+        background: #fff;
+    }
+
+    .record-card.duplicate-pending {
+        border-color: #ffbf69;
+        box-shadow: 0 0 0 2px rgba(255, 191, 105, 0.18);
+    }
+
+    .record-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        margin-bottom: 13px;
+    }
+
+    .record-head h4 {
+        margin: 0 0 5px;
+        font-size: 17px;
+        font-weight: 800;
+    }
+
+    .score-chip {
+        border-radius: 999px;
+        padding: 8px 12px;
+        background: #e8f0ff;
+        color: #165dff;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .field-grid, .score-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 9px;
+    }
+
+    .field-item, .score-item {
+        background: #f8fbff;
+        border: 1px solid #dfe9f3;
+        border-radius: 8px;
+        padding: 10px;
+    }
+
+    .field-item span:first-child, .score-item span:first-child {
+        display: block;
+        color: #627486;
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+
+    .image-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 11px;
+        margin-top: 12px;
+    }
+
+    .image-box {
+        border: 1px solid #dbe6f0;
+        border-radius: 8px;
+        padding: 8px;
+        background: #fff;
+    }
+
+    .image-box img {
+        width: 100%;
+        border-radius: 6px;
+        display: block;
+        background: #f7fbff;
+        cursor: zoom-in;
+    }
+
+    .image-box strong {
+        display: block;
+        margin: 7px 3px 0;
+        font-size: 12px;
+    }
+
+    .answer-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+        gap: 7px;
+        margin-top: 12px;
+    }
+
+    .answer-item {
+        border-radius: 8px;
+        border: 1px solid #dbe6f0;
+        padding: 7px;
+        background: #fff;
+        text-align: center;
+        font-size: 12px;
+    }
+
+    .answer-item strong {
+        display: block;
+        font-size: 11px;
+        color: #627486;
+        margin-bottom: 2px;
+    }
+
+    .modal-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 23, 38, 0.66);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        z-index: 1000;
+    }
+
+    .modal-box {
+        width: min(1080px, 100%);
+        max-height: 92vh;
+        overflow-y: auto;
+        background: #fff;
+        border-radius: 8px;
+        padding: 22px;
+    }
+
+    .modal-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: flex-start;
+        margin-bottom: 16px;
+    }
+
+    .modal-head h3 {
+        margin: 0 0 6px;
+        font-size: 20px;
+        font-weight: 800;
+    }
+
+    .candidate-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 12px;
+    }
+
+    .candidate {
+        border: 2px solid #dbe6f0;
+        border-radius: 8px;
+        padding: 12px;
+        cursor: pointer;
+        background: #fff;
+    }
+
+    .candidate.selected {
+        border-color: #165dff;
+        background: #f5f8ff;
+    }
+
+    .candidate img {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        object-fit: contain;
+        border: 1px solid #e5eef6;
+        border-radius: 6px;
+        background: #f8fbff;
+        margin-bottom: 9px;
+    }
+
+    .candidate-info {
+        display: grid;
+        gap: 4px;
+        font-size: 13px;
+        color: #4f6173;
+    }
+
+    .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 16px;
+        flex-wrap: wrap;
+    }
+
+    .lightbox-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(8, 18, 30, 0.82);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        z-index: 1200;
+    }
+
+    .lightbox-mask img {
+        max-width: 96vw;
+        max-height: 92vh;
+        object-fit: contain;
+        background: #fff;
+        border-radius: 8px;
+    }
+
+    .lightbox-close {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        border: none;
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        background: #fff;
+        color: #15202b;
+        cursor: pointer;
+        font-size: 20px;
+    }
+
+    @media (max-width: 1080px) {
+        .page-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="page-grid">
+    <section class="card-panel panel">
+        <div class="upload-box" id="uploadArea">
+            <h3>답안지 업로드</h3>
+            <p>PDF와 이미지 파일을 여러 개 선택할 수 있습니다.</p>
+            <p>동일 학생의 다른 답안지가 감지되면 선택 팝업이 표시됩니다.</p>
+        </div>
+        <input id="fileInput" type="file" accept="image/*,.pdf,application/pdf" multiple>
+
+        <button id="startBtn" class="btn-main start-btn">
+            <i class="fa fa-play"></i>선택 파일 채점 시작
+        </button>
+
+        <div class="side-meta">
+            <div class="meta-item">
+                <strong>시험명</strong>
+                <span>{{ exam.title }}</span>
+            </div>
+            <div class="meta-item">
+                <strong>문항 구성</strong>
+                <span>객관식 {{ exam.objective_count }}문항 / 주관식 {{ exam.subjective_count }}문항</span>
+            </div>
+            <div class="meta-item">
+                <strong>선택항</strong>
+                <span>{{ exam.option_labels_text }}</span>
+            </div>
+            <div class="meta-item">
+                <strong>OMR 양식</strong>
+                <span>{{ template.name }}</span>
+                {% if template.pdf_url %}
+                <div style="margin-top:8px;">
+                    <a class="btn-sub" href="{{ template.pdf_url }}"><i class="fa fa-file-pdf-o"></i>양식 PDF</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="preview-grid" id="previewGrid"></div>
+    </section>
+
+    <section class="card-panel panel">
+        <div class="toolbar">
+            <div class="status-bar" id="statusBar">파일을 선택하면 채점 대기 목록이 표시됩니다.</div>
+            <button id="exportBtn" class="btn-sub" style="display:none;">
+                <i class="fa fa-file-excel-o"></i>현재 배치 XLSX
+            </button>
+        </div>
+        <div class="results" id="resultsBox"></div>
+    </section>
+</div>
+
+<div class="modal-mask" id="duplicateModal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div>
+                <h3>중복 학생 답안지 선택</h3>
+                <div id="duplicateSubtitle" style="color:#627486; font-size:14px;"></div>
+            </div>
+        </div>
+        <div class="candidate-grid" id="candidateGrid"></div>
+        <div class="modal-actions">
+            <button class="btn-main" type="button" id="keepSelectedBtn"><i class="fa fa-check"></i>선택한 답안지 저장</button>
+        </div>
+    </div>
+</div>
+
+<div class="lightbox-mask" id="imageLightbox">
+    <button class="lightbox-close" type="button" onclick="closeImageLightbox()">×</button>
+    <img id="lightboxImage" src="" alt="확대 이미지">
+</div>
+
+<script>
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const startBtn = document.getElementById('startBtn');
+    const previewGrid = document.getElementById('previewGrid');
+    const statusBar = document.getElementById('statusBar');
+    const resultsBox = document.getElementById('resultsBox');
+    const exportBtn = document.getElementById('exportBtn');
+    const duplicateModal = document.getElementById('duplicateModal');
+    const duplicateSubtitle = document.getElementById('duplicateSubtitle');
+    const candidateGrid = document.getElementById('candidateGrid');
+    const keepSelectedBtn = document.getElementById('keepSelectedBtn');
+
+    let selectedFiles = [];
+    let rawResults = [];
+    let duplicateState = null;
+
+    uploadArea.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', () => {
+        selectedFiles = Array.from(fileInput.files);
+        previewGrid.innerHTML = '';
+
+        if (!selectedFiles.length) {
+            statusBar.textContent = '선택된 파일이 없습니다.';
+            return;
+        }
+
+        statusBar.textContent = `${selectedFiles.length}개 파일이 선택되었습니다.`;
+        selectedFiles.forEach(file => {
+            const item = document.createElement('div');
+            item.className = 'preview-item';
+
+            if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+                item.innerHTML = `
+                    <div class="pdf-box"><i class="fa fa-file-pdf-o"></i></div>
+                    <div class="preview-name">${escapeHtml(file.name)}</div>
+                `;
+            } else {
+                const reader = new FileReader();
+                reader.onload = event => {
+                    item.innerHTML = `
+                        <img src="${event.target.result}" alt="${escapeHtml(file.name)}">
+                        <div class="preview-name">${escapeHtml(file.name)}</div>
+                    `;
+                };
+                reader.readAsDataURL(file);
+            }
+
+            previewGrid.appendChild(item);
+        });
+    });
+
+    startBtn.addEventListener('click', async () => {
+        if (!selectedFiles.length) {
+            alert('먼저 채점할 파일을 선택해 주세요.');
+            return;
+        }
+
+        rawResults = [];
+        resultsBox.innerHTML = '';
+        exportBtn.style.display = 'none';
+        startBtn.disabled = true;
+        startBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>채점 중...';
+
+        for (let index = 0; index < selectedFiles.length; index += 1) {
+            const file = selectedFiles[index];
+            statusBar.textContent = `${index + 1}/${selectedFiles.length} 처리 중: ${file.name}`;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`{{ url_for('upload_exam_file', exam_id=exam.id) }}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || '채점 중 오류가 발생했습니다.');
+                }
+
+                rawResults.push({ fileName: file.name, ...data });
+                appendResultCard(file.name, data);
+
+                if ((data.auto_replaced_record_ids || []).length) {
+                    statusBar.textContent = `${file.name}: 동일 파일 재업로드로 이전 기록을 마지막 업로드 기준으로 교체했습니다.`;
+                }
+
+                if (data.duplicate_conflict) {
+                    await openDuplicateModal(data, file.name);
+                }
+            } catch (error) {
+                appendErrorCard(file.name, error.message);
+            }
+        }
+
+        startBtn.disabled = false;
+        startBtn.innerHTML = '<i class="fa fa-play"></i>선택 파일 채점 시작';
+        statusBar.textContent = `채점 완료: ${selectedFiles.length}개 중 ${rawResults.length}개 저장`;
+
+        if (rawResults.length) {
+            exportBtn.style.display = 'inline-flex';
+        }
+    });
+
+    exportBtn.addEventListener('click', async () => {
+        if (!rawResults.length) return;
+
+        const response = await fetch('{{ url_for("export_batch_results") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                exam_title: '{{ exam.title }}',
+                raw_results: rawResults
+            })
+        });
+
+        if (!response.ok) {
+            alert('XLSX 내보내기에 실패했습니다.');
+            return;
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `batch_{{ exam.id }}_${Date.now()}.xlsx`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.URL.revokeObjectURL(url);
+    });
+
+    function appendResultCard(fileName, data) {
+        const fields = data.recognized_fields || {};
+        const evalData = data.evaluation || {};
+        const answers = Object.entries(data.student_answers || {}).sort((a, b) => Number(a[0]) - Number(b[0]));
+        const fieldImages = data.field_images || [];
+        const sheetImages = data.sheet_images || [];
+        const subjectiveImages = data.subjective_images || [];
+
+        const fieldImageHtml = fieldImages.map(item => `
+            <div class="image-box">
+                <img src="${item.url}" alt="${escapeHtml(item.field)}" data-full-url="${escapeHtml(item.url)}">
+                <strong>${translateField(item.field)}</strong>
+            </div>
+        `).join('');
+
+        const subjectiveImageHtml = subjectiveImages.map(item => `
+            <div class="image-box">
+                <img src="${item.url}" alt="Q${escapeHtml(item.question_number)} 주관식" data-full-url="${escapeHtml(item.url)}">
+                <strong>주관식 Q${escapeHtml(item.question_number)}</strong>
+            </div>
+        `).join('');
+
+        const sheetImageHtml = sheetImages.map(item => `
+            <div class="image-box">
+                <img src="${item.url}" alt="${escapeHtml(item.title || '답안 작성 화면')}" data-full-url="${escapeHtml(item.url)}">
+                <strong>${escapeHtml(item.title || '답안 작성 화면')}</strong>
+            </div>
+        `).join('');
+
+        const answerHtml = answers.map(([question, answer]) => `
+            <div class="answer-item">
+                <strong>Q${escapeHtml(question)}</strong>
+                <span>${escapeHtml(answer || '-')}</span>
+            </div>
+        `).join('');
+
+        const card = document.createElement('article');
+        card.className = `record-card ${data.duplicate_conflict ? 'duplicate-pending' : ''}`;
+        card.dataset.recordId = data.record_id;
+        card.innerHTML = `
+            <div class="record-head">
+                <div>
+                    <h4>${escapeHtml(fileName)}</h4>
+                    <div style="color:#627486; font-size:13px;">record #${data.record_id}</div>
+                </div>
+                <div class="score-chip">${evalData.percentage || 0}%</div>
+            </div>
+
+            <div class="field-grid">
+                <div class="field-item"><span>학과</span><strong>${escapeHtml(fields.department || '-')}</strong></div>
+                <div class="field-item"><span>학번</span><strong>${escapeHtml(fields.student_id || '-')}</strong></div>
+                <div class="field-item"><span>학년</span><strong>${escapeHtml(fields.grade || '-')}</strong></div>
+                <div class="field-item"><span>이름</span><strong>${escapeHtml(fields.name || '-')}</strong></div>
+            </div>
+
+            <div class="score-grid" style="margin-top:11px;">
+                <div class="score-item"><span>전체 문항</span><strong>${evalData.total || 0}</strong></div>
+                <div class="score-item"><span>정답</span><strong style="color:#0f9d58;">${evalData.correct || 0}</strong></div>
+                <div class="score-item"><span>오답</span><strong style="color:#d93025;">${evalData.wrong || 0}</strong></div>
+                <div class="score-item"><span>미응답</span><strong style="color:#ff8f00;">${evalData.unanswered || 0}</strong></div>
+            </div>
+
+            <div class="image-grid">
+                ${sheetImageHtml}
+                <div class="image-box">
+                    <img src="${data.original_image}" alt="original" data-full-url="${escapeHtml(data.original_image)}">
+                    <strong>원본 미리보기</strong>
+                </div>
+                <div class="image-box">
+                    <img src="${data.cropped_choice_image}" alt="answer area" data-full-url="${escapeHtml(data.cropped_choice_image)}">
+                    <strong>OMR 답란</strong>
+                </div>
+                <div class="image-box">
+                    <img src="${data.annotated_image}" alt="annotated" data-full-url="${escapeHtml(data.annotated_image)}">
+                    <strong>채점 표시</strong>
+                </div>
+                ${fieldImageHtml}
+                ${subjectiveImageHtml}
+            </div>
+
+            <div class="answer-grid">${answerHtml}</div>
+        `;
+
+        resultsBox.prepend(card);
+        attachZoomHandlers(card);
+    }
+
+    function appendErrorCard(fileName, errorMessage) {
+        const card = document.createElement('article');
+        card.className = 'record-card';
+        card.style.borderColor = '#f0c6c3';
+        card.innerHTML = `
+            <div class="record-head">
+                <div>
+                    <h4>${escapeHtml(fileName)}</h4>
+                    <div style="color:#a61d24; font-size:14px;">처리 실패</div>
+                </div>
+                <div class="score-chip" style="background:#fff1f0; color:#a61d24;">ERROR</div>
+            </div>
+            <div style="color:#7d2c2a; line-height:1.6;">${escapeHtml(errorMessage)}</div>
+        `;
+        resultsBox.prepend(card);
+    }
+
+    function openDuplicateModal(data, fileName) {
+        const records = [data.current_record, ...(data.duplicate_candidates || [])].filter(Boolean);
+        if (records.length < 2) return Promise.resolve();
+
+        return new Promise(resolve => {
+            duplicateState = {
+                records,
+                selectedId: data.current_record.record_id,
+                resolve
+            };
+            const current = data.current_record || {};
+            duplicateSubtitle.textContent = `${current.student_name || '-'} (${current.student_id || '-'}) 학생의 ${records.length}개 답안지 중 저장할 1개를 선택하세요.`;
+            candidateGrid.innerHTML = records.map(record => candidateHtml(record, record.record_id === duplicateState.selectedId)).join('');
+            candidateGrid.querySelectorAll('.candidate').forEach(item => {
+                item.addEventListener('click', () => {
+                    duplicateState.selectedId = Number(item.dataset.recordId);
+                    candidateGrid.querySelectorAll('.candidate').forEach(node => node.classList.remove('selected'));
+                    item.classList.add('selected');
+                });
+            });
+            duplicateModal.style.display = 'flex';
+        });
+    }
+
+    keepSelectedBtn.addEventListener('click', async () => {
+        if (!duplicateState) return;
+        const recordIds = duplicateState.records.map(record => record.record_id);
+        const keepRecordId = duplicateState.selectedId;
+        keepSelectedBtn.disabled = true;
+        keepSelectedBtn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>저장 중...';
+
+        try {
+            const response = await fetch('{{ url_for("resolve_duplicate_records") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    keep_record_id: keepRecordId,
+                    duplicate_record_ids: recordIds
+                })
+            });
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || '중복 처리에 실패했습니다.');
+            }
+
+            const deletedIds = recordIds.filter(recordId => recordId !== keepRecordId);
+            deletedIds.forEach(recordId => {
+                const card = resultsBox.querySelector(`[data-record-id="${recordId}"]`);
+                if (card) card.remove();
+            });
+            const keptCard = resultsBox.querySelector(`[data-record-id="${keepRecordId}"]`);
+            if (keptCard) keptCard.classList.remove('duplicate-pending');
+            rawResults = rawResults.filter(item => !deletedIds.includes(item.record_id));
+            statusBar.textContent = `중복 답안지 처리 완료: record #${keepRecordId} 저장`;
+            duplicateModal.style.display = 'none';
+            duplicateState.resolve();
+            duplicateState = null;
+        } catch (error) {
+            alert(error.message);
+        } finally {
+            keepSelectedBtn.disabled = false;
+            keepSelectedBtn.innerHTML = '<i class="fa fa-check"></i>선택한 답안지 저장';
+        }
+    });
+
+    function candidateHtml(record, selected) {
+        return `
+            <article class="candidate ${selected ? 'selected' : ''}" data-record-id="${record.record_id}">
+                <img src="${record.sheet_image || record.original_image || record.annotated_image || ''}" alt="record ${record.record_id}">
+                <div class="candidate-info">
+                    <strong>record #${record.record_id}</strong>
+                    <span>이름: ${escapeHtml(record.student_name || '-')}</span>
+                    <span>학번: ${escapeHtml(record.student_id || '-')}</span>
+                    <span>점수: ${escapeHtml(String(record.total_score ?? record.score ?? '-'))}</span>
+                    <span>저장 시각: ${escapeHtml(record.created_at || '-')}</span>
+                </div>
+            </article>
+        `;
+    }
+
+    function translateField(field) {
+        const labels = {
+            department: '학과 영역',
+            student_id: '학번 영역',
+            grade: '학년 영역',
+            name: '이름 영역'
+        };
+        return labels[field] || field;
+    }
+
+    function attachZoomHandlers(root) {
+        root.querySelectorAll('img[data-full-url]').forEach(image => {
+            image.addEventListener('click', () => openImageLightbox(image.dataset.fullUrl));
+        });
+    }
+
+    function openImageLightbox(url) {
+        const lightbox = document.getElementById('imageLightbox');
+        document.getElementById('lightboxImage').src = url;
+        lightbox.style.display = 'flex';
+    }
+
+    function closeImageLightbox() {
+        const lightbox = document.getElementById('imageLightbox');
+        lightbox.style.display = 'none';
+        document.getElementById('lightboxImage').src = '';
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    document.getElementById('imageLightbox').addEventListener('click', event => {
+        if (event.target.id === 'imageLightbox') closeImageLightbox();
+    });
+</script>
+{% endblock %}

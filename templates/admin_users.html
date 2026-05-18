@@ -1,0 +1,321 @@
+{% extends "index.html" %}
+
+{% block page_title %}사용자 관리{% endblock %}
+{% block page_subtitle %}자동 생성된 학생 계정까지 포함해 사용자 정보를 확인하고 수정할 수 있습니다.{% endblock %}
+
+{% block content %}
+<style>
+    .panel { padding: 22px; }
+    .toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+
+    .search-form { display: flex; gap: 10px; flex-wrap: wrap; }
+    .search-form input {
+        border: 1px solid #d4dfeb;
+        border-radius: 14px;
+        padding: 11px 13px;
+        min-width: 260px;
+    }
+
+    .btn-main, .btn-sub {
+        border: none;
+        border-radius: 14px;
+        padding: 11px 15px;
+        cursor: pointer;
+        font-weight: 700;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .btn-main { background: linear-gradient(135deg, #165dff, #0c44c7); color: #fff; }
+    .btn-sub { background: #eef4fb; color: #17385d; }
+
+    .table-wrap { overflow-x: auto; }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1100px;
+    }
+
+    th, td {
+        padding: 14px 12px;
+        border-bottom: 1px solid #e5eef6;
+        text-align: left;
+        font-size: 14px;
+    }
+
+    th {
+        color: #587086;
+        font-size: 13px;
+        font-weight: 700;
+        background: #f7fbff;
+    }
+
+    .tag {
+        padding: 5px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .tag.admin { background: #edf4ff; color: #165dff; }
+    .tag.user { background: #effaf4; color: #0f9d58; }
+    .tag.auto { background: #fff5e8; color: #b26a00; }
+    .permission-note {
+        color: #627486;
+        font-size: 13px;
+        margin: 0;
+    }
+
+    .modal-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 23, 38, 0.62);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        z-index: 999;
+    }
+
+    .modal-box {
+        width: min(540px, 100%);
+        background: #fff;
+        border-radius: 24px;
+        padding: 24px;
+    }
+
+    .modal-box h3 { margin-top: 0; }
+    .modal-grid {
+        display: grid;
+        gap: 12px;
+    }
+
+    label {
+        display: block;
+        margin-bottom: 6px;
+        font-weight: 700;
+        font-size: 14px;
+    }
+
+    input, select {
+        width: 100%;
+        border: 1px solid #d4dfeb;
+        border-radius: 14px;
+        padding: 11px 13px;
+    }
+</style>
+
+<section class="card-panel panel">
+    <div class="toolbar">
+        <form class="search-form" method="get" action="{{ url_for('admin_users') }}">
+            <input type="text" name="search" value="{{ search }}" placeholder="학번, 이름, 학과 검색">
+            <button class="btn-main" type="submit"><i class="fa fa-search"></i> 검색</button>
+        </form>
+        <p class="permission-note">
+            {% if can_grant_admin %}
+            최고 관리자 권한으로 학생 계정에 관리자 권한을 부여할 수 있습니다.
+            {% else %}
+            권한 변경은 최고 관리자({{ super_admin_student_id }})만 가능합니다.
+            {% endif %}
+        </p>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>ID</th>
+                <th>학번</th>
+                <th>이름</th>
+                <th>학과</th>
+                <th>학년</th>
+                <th>이메일</th>
+                <th>권한</th>
+                <th>계정 생성</th>
+                <th>작업</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for item in users %}
+            <tr>
+                <td>{{ item.id }}</td>
+                <td>{{ item.student_id }}</td>
+                <td>{{ item.name }}</td>
+                <td>{{ item.department or '-' }}</td>
+                <td>{{ item.grade or '-' }}</td>
+                <td>{{ item.email or '-' }}</td>
+                <td><span class="tag {{ item.role }}">{{ '관리자' if item.role == 'admin' else '학생' }}</span></td>
+                <td>
+                    {% if item.auto_created %}
+                    <span class="tag auto">자동 생성</span>
+                    {% else %}
+                    <span style="color:#627486;">수동 등록</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn-main" type="button" onclick='openEdit({{ item|tojson|forceescape }})'>
+                            <i class="fa fa-pencil"></i> 수정
+                        </button>
+                        <button class="btn-sub" type="button" onclick="resetPassword({{ item.id }}, '{{ item.student_id }}')">
+                            <i class="fa fa-key"></i> 비밀번호 초기화
+                        </button>
+                        {% if can_grant_admin and item.role != 'admin' %}
+                        <button class="btn-sub" type="button" onclick='grantAdmin({{ item|tojson|forceescape }})'>
+                            <i class="fa fa-user-plus"></i> 관리자 부여
+                        </button>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" style="text-align:center; color:#627486;">사용자가 없습니다.</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div class="modal-mask" id="editModal">
+    <div class="modal-box">
+        <h3>사용자 정보 수정</h3>
+        <form id="editForm" class="modal-grid">
+            <input type="hidden" name="id" id="edit_id">
+            <div>
+                <label for="edit_student_id">학번</label>
+                <input id="edit_student_id" name="student_id" required>
+            </div>
+            <div>
+                <label for="edit_name">이름</label>
+                <input id="edit_name" name="name" required>
+            </div>
+            <div>
+                <label for="edit_department">학과</label>
+                <input id="edit_department" name="department">
+            </div>
+            <div>
+                <label for="edit_grade">학년</label>
+                <input id="edit_grade" name="grade">
+            </div>
+            <div>
+                <label for="edit_gender">성별</label>
+                <input id="edit_gender" name="gender">
+            </div>
+            <div>
+                <label for="edit_email">이메일</label>
+                <input id="edit_email" name="email" type="email">
+            </div>
+            <div>
+                <label for="edit_role">권한</label>
+                <select id="edit_role" name="role">
+                    <option value="user">학생</option>
+                    <option value="admin">관리자</option>
+                </select>
+                <div id="roleHelp" style="margin-top:6px; color:#627486; font-size:12px;"></div>
+            </div>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:4px;">
+                <button class="btn-main" type="submit"><i class="fa fa-save"></i> 저장</button>
+                <button class="btn-sub" type="button" onclick="closeEdit()">취소</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    const editModal = document.getElementById('editModal');
+    const editForm = document.getElementById('editForm');
+    const canGrantAdmin = {{ 'true' if can_grant_admin else 'false' }};
+
+    function openEdit(user) {
+        document.getElementById('edit_id').value = user.id;
+        document.getElementById('edit_student_id').value = user.student_id || '';
+        document.getElementById('edit_name').value = user.name || '';
+        document.getElementById('edit_department').value = user.department || '';
+        document.getElementById('edit_grade').value = user.grade || '';
+        document.getElementById('edit_gender').value = user.gender || '';
+        document.getElementById('edit_email').value = user.email || '';
+        document.getElementById('edit_role').value = user.role || 'user';
+        document.getElementById('edit_role').disabled = !canGrantAdmin;
+        document.getElementById('roleHelp').textContent = canGrantAdmin
+            ? '최고 관리자는 이 사용자의 권한을 변경할 수 있습니다.'
+            : '최고 관리자만 권한을 변경할 수 있습니다.';
+        editModal.style.display = 'flex';
+    }
+
+    function closeEdit() {
+        editModal.style.display = 'none';
+    }
+
+    editModal.addEventListener('click', event => {
+        if (event.target === editModal) closeEdit();
+    });
+
+    editForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        const formData = new URLSearchParams(new FormData(editForm));
+        const response = await fetch('{{ url_for("admin_user_update") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        });
+        const data = await response.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.msg || '저장에 실패했습니다.');
+        }
+    });
+
+    async function grantAdmin(user) {
+        if (!confirm(`${user.name || user.student_id} 사용자에게 관리자 권한을 부여할까요?`)) return;
+        const formData = new URLSearchParams({
+            id: user.id,
+            student_id: user.student_id || '',
+            name: user.name || '',
+            department: user.department || '',
+            grade: user.grade || '',
+            gender: user.gender || '',
+            email: user.email || '',
+            role: 'admin'
+        });
+        const response = await fetch('{{ url_for("admin_user_update") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        });
+        const data = await response.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            alert(data.msg || '권한 부여에 실패했습니다.');
+        }
+    }
+
+    async function resetPassword(userId, studentId) {
+        const defaultValue = studentId || '';
+        const newPassword = prompt('새 비밀번호를 입력하세요.', defaultValue);
+        if (!newPassword) return;
+        const formData = new URLSearchParams({ user_id: userId, new_password: newPassword });
+        const response = await fetch('{{ url_for("admin_user_reset_pwd") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData
+        });
+        const data = await response.json();
+        if (data.success) alert('비밀번호가 초기화되었습니다.');
+    }
+</script>
+{% endblock %}

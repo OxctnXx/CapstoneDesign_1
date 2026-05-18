@@ -1,0 +1,708 @@
+{% extends "index.html" %}
+
+{% block page_title %}채점 기록{% endblock %}
+{% block page_subtitle %}학생별 OCR 결과, 채점 결과, PDF/XLSX 내보내기를 한 곳에서 확인할 수 있습니다.{% endblock %}
+
+{% block content %}
+<style>
+    .panel {
+        padding: 22px;
+    }
+
+    .toolbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+
+    .search-form {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    input[type="text"], input[type="number"] {
+        border: 1px solid #d4dfeb;
+        border-radius: 14px;
+        padding: 11px 13px;
+        min-width: 220px;
+    }
+
+    .btn-main, .btn-sub, .btn-danger {
+        border: none;
+        border-radius: 14px;
+        padding: 11px 15px;
+        cursor: pointer;
+        font-weight: 700;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+    }
+
+    .btn-main { background: linear-gradient(135deg, #165dff, #0c44c7); color: #fff; }
+    .btn-sub { background: #eef4fb; color: #17385d; }
+    .btn-danger { background: #fff1f0; color: #a61d24; }
+
+    .table-wrap {
+        overflow-x: auto;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 1080px;
+    }
+
+    th, td {
+        padding: 14px 12px;
+        border-bottom: 1px solid #e5eef6;
+        text-align: left;
+        font-size: 14px;
+        vertical-align: top;
+    }
+
+    th {
+        color: #587086;
+        font-size: 13px;
+        font-weight: 700;
+        background: #f7fbff;
+    }
+
+    .score-text {
+        font-weight: 700;
+        color: #165dff;
+    }
+
+    .tag {
+        display: inline-flex;
+        align-items: center;
+        padding: 5px 9px;
+        border-radius: 999px;
+        background: #edf4ff;
+        color: #165dff;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .modal-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 23, 38, 0.62);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        z-index: 999;
+    }
+
+    .modal-box {
+        width: min(1120px, 100%);
+        max-height: 90vh;
+        overflow-y: auto;
+        background: #fff;
+        border-radius: 24px;
+        padding: 24px;
+    }
+
+    .modal-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .close-btn {
+        border: none;
+        background: #eef4fb;
+        width: 40px;
+        height: 40px;
+        border-radius: 999px;
+        cursor: pointer;
+        font-size: 18px;
+    }
+
+    .detail-grid, .image-grid, .answer-grid {
+        display: grid;
+        gap: 12px;
+    }
+
+    .detail-grid {
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    }
+
+    .detail-item {
+        border: 1px solid #dfe9f3;
+        background: #f8fbff;
+        border-radius: 14px;
+        padding: 12px 14px;
+    }
+
+    .detail-item span {
+        display: block;
+        color: #627486;
+        font-size: 12px;
+        margin-bottom: 5px;
+    }
+
+    .image-grid {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        margin-top: 16px;
+    }
+
+    .image-box {
+        border: 1px solid #dfe9f3;
+        border-radius: 16px;
+        padding: 10px;
+        background: #fff;
+    }
+
+    .image-box img {
+        width: 100%;
+        border-radius: 12px;
+        display: block;
+        background: #f7fbff;
+        cursor: zoom-in;
+    }
+
+    .image-box strong {
+        display: block;
+        margin: 8px 3px 0;
+        font-size: 13px;
+    }
+
+    .source-link {
+        display: inline-flex;
+        margin: 8px 3px 0;
+        color: #165dff;
+        font-size: 13px;
+        font-weight: 700;
+        text-decoration: none;
+    }
+
+    .answer-grid {
+        grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+        margin-top: 16px;
+    }
+
+    .answer-item {
+        border: 1px solid #dbe6f0;
+        border-radius: 12px;
+        padding: 8px;
+        text-align: center;
+        font-size: 13px;
+    }
+
+    .answer-item strong {
+        display: block;
+        font-size: 12px;
+        color: #627486;
+        margin-bottom: 3px;
+    }
+
+    .objective-box {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .subjective-section {
+        margin-top: 18px;
+        border-top: 1px solid #e5eef6;
+        padding-top: 16px;
+    }
+
+    .subjective-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+
+    .subjective-head h4 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 800;
+    }
+
+    .subjective-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 12px;
+    }
+
+    .subjective-card {
+        border: 2px solid #dbe6f0;
+        border-radius: 14px;
+        padding: 10px;
+        background: #fff;
+    }
+
+    .subjective-card.graded {
+        border-color: #0f9d58;
+        box-shadow: 0 0 0 2px rgba(15, 157, 88, 0.12);
+    }
+
+    .subjective-card img {
+        width: 100%;
+        aspect-ratio: 5 / 2;
+        object-fit: contain;
+        border: 1px solid #e5eef6;
+        border-radius: 10px;
+        background: #f8fbff;
+        cursor: zoom-in;
+    }
+
+    .subjective-card h5 {
+        margin: 8px 0;
+        font-size: 14px;
+        font-weight: 800;
+    }
+
+    .subjective-actions {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin: 8px 0;
+    }
+
+    .status-btn {
+        border: 1px solid #dbe6f0;
+        background: #f8fbff;
+        color: #35516c;
+        border-radius: 999px;
+        padding: 7px 9px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .status-btn.active[data-status="correct"] {
+        background: #effaf4;
+        border-color: #0f9d58;
+        color: #0b6b3a;
+    }
+
+    .status-btn.active[data-status="wrong"] {
+        background: #fff5e8;
+        border-color: #ff8f00;
+        color: #9a5200;
+    }
+
+    .status-btn.active[data-status="ungraded"] {
+        background: #eef4fb;
+        border-color: #9fb5ca;
+        color: #35516c;
+    }
+
+    .subjective-score-row {
+        display: grid;
+        grid-template-columns: 80px 1fr;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .subjective-score-row input {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .lightbox-mask {
+        position: fixed;
+        inset: 0;
+        background: rgba(8, 18, 30, 0.82);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 28px;
+        z-index: 1200;
+    }
+
+    .lightbox-mask img {
+        max-width: 96vw;
+        max-height: 92vh;
+        object-fit: contain;
+        background: #fff;
+        border-radius: 8px;
+    }
+
+    .lightbox-close {
+        position: fixed;
+        top: 18px;
+        right: 18px;
+        border: none;
+        width: 42px;
+        height: 42px;
+        border-radius: 999px;
+        background: #fff;
+        color: #15202b;
+        cursor: pointer;
+        font-size: 20px;
+    }
+
+    @media (max-width: 720px) {
+        .toolbar {
+            align-items: stretch;
+        }
+
+        .search-form {
+            width: 100%;
+        }
+
+        .search-form input {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+</style>
+
+<section class="card-panel panel">
+    <div class="toolbar">
+        <form class="search-form" method="get" action="{{ url_for('recognition_history') }}">
+            <input type="text" name="search" value="{{ search }}" placeholder="학생명, 학번, 학과, 시험명 검색">
+            <button class="btn-main" type="submit"><i class="fa fa-search"></i> 검색</button>
+        </form>
+        <a class="btn-sub" href="{{ url_for('export_all_xlsx') }}"><i class="fa fa-file-excel-o"></i> 전체 엑셀</a>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>시험</th>
+                <th>학생명</th>
+                <th>학번</th>
+                <th>학과</th>
+                <th>학년</th>
+                <th>점수</th>
+                <th>생성일</th>
+                <th>작업</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for record in records %}
+            {% set fields = record.ocr.get('fields', {}) %}
+            <tr>
+                <td>
+                    <strong>{{ record.exam_title or record.subject }}</strong><br>
+                    <span class="tag">{{ record.template_name or 'template' }}</span>
+                </td>
+                <td>{{ fields.get('name') or record.name or '-' }}</td>
+                <td>{{ fields.get('student_id') or record.student_id or '-' }}</td>
+                <td>{{ fields.get('department') or record.department or '-' }}</td>
+                <td>{{ fields.get('grade') or record.grade or '-' }}</td>
+                <td><span class="score-text">{{ record.total_score }}</span></td>
+                <td>{{ record.created_at_display }}</td>
+                <td>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn-main" type="button" onclick='openDetail({{ record|tojson|forceescape }})'>
+                            <i class="fa fa-eye"></i> 상세
+                        </button>
+                        <a class="btn-sub" href="{{ url_for('export_pdf', record_id=record.id) }}"><i class="fa fa-file-pdf-o"></i> PDF</a>
+                        <a class="btn-sub" href="{{ url_for('export_single_xlsx', record_id=record.id) }}"><i class="fa fa-file-excel-o"></i> XLSX</a>
+                        <button class="btn-danger" type="button" onclick="deleteRecord({{ record.id }})">
+                            <i class="fa fa-trash"></i> 삭제
+                        </button>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8" style="text-align:center; color:#627486;">검색 결과가 없습니다.</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div class="modal-mask" id="detailModal">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div>
+                <h3 id="modalTitle" style="margin:0;"></h3>
+                <div id="modalSubtitle" style="margin-top:6px; color:#627486;"></div>
+            </div>
+            <button class="close-btn" type="button" onclick="closeDetail()">×</button>
+        </div>
+
+        <div class="detail-grid" id="detailGrid"></div>
+
+        <div class="image-grid" id="imageGrid"></div>
+        <div class="subjective-section" id="subjectiveSection" style="display:none;">
+            <div class="subjective-head">
+                <h4>주관식 수동 채점</h4>
+                <div id="subjectiveSummary" style="color:#627486; font-size:13px;"></div>
+            </div>
+            <div class="subjective-grid" id="subjectiveGrid"></div>
+            <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+                <button class="btn-main" type="button" onclick="saveSubjectiveGrading()">주관식 채점 저장</button>
+            </div>
+        </div>
+        <div class="answer-grid" id="answerGrid"></div>
+
+        <div class="objective-box">
+            <label for="objectiveScoreInput" style="font-weight:700;">수동 총점 직접 조정</label>
+            <input id="objectiveScoreInput" type="number" min="0" step="0.1" style="max-width:160px;">
+            <button class="btn-main" type="button" onclick="saveObjectiveScore()">저장</button>
+        </div>
+    </div>
+</div>
+
+<div class="lightbox-mask" id="imageLightbox">
+    <button class="lightbox-close" type="button" onclick="closeImageLightbox()">×</button>
+    <img id="lightboxImage" src="" alt="확대 이미지">
+</div>
+
+<script>
+    let currentRecord = null;
+    let subjectiveResults = {};
+
+    function openDetail(record) {
+        currentRecord = record;
+        document.getElementById('detailModal').style.display = 'flex';
+        document.getElementById('modalTitle').textContent = record.exam_title || record.subject;
+        document.getElementById('modalSubtitle').textContent = `record #${record.id} · ${record.created_at_display}`;
+        document.getElementById('objectiveScoreInput').value = record.objective_score || 0;
+
+        const fields = (record.ocr && record.ocr.fields) || {};
+        const detailItems = [
+            ['학생명', fields.name || record.name || '-'],
+            ['학번', fields.student_id || record.student_id || '-'],
+            ['학과', fields.department || record.department || '-'],
+            ['학년', fields.grade || record.grade || '-'],
+            ['정답 수', record.correct],
+            ['오답 수', record.wrong],
+            ['미응답', record.unanswered],
+            ['총점', record.total_score]
+        ];
+
+        document.getElementById('detailGrid').innerHTML = detailItems.map(item => `
+            <div class="detail-item">
+                <span>${item[0]}</span>
+                <strong>${item[1]}</strong>
+            </div>
+        `).join('');
+
+        const imageBoxes = [
+            ...((record.sheet_images || []).map(item => ({ title: item.title || '답안 작성 화면', url: item.url }))),
+            { title: '업로드 미리보기', url: record.original_url },
+            { title: 'OMR 영역', url: record.choice_url },
+            { title: '채점 결과', url: record.annotated_url }
+        ];
+
+        (((record.ocr || {}).field_images) || []).forEach(item => {
+            imageBoxes.push({ title: translateField(item.field), url: item.url });
+        });
+
+        document.getElementById('imageGrid').innerHTML = imageBoxes.filter(item => item.url).map(item => `
+            <div class="image-box">
+                <img src="${item.url}" alt="${item.title}" data-full-url="${escapeHtml(item.url)}">
+                <strong>${item.title}</strong>
+            </div>
+        `).join('') + (record.source_url ? `
+            <div class="image-box">
+                <a class="source-link" href="${record.source_url}" target="_blank" rel="noopener">
+                    <i class="fa fa-external-link"></i>&nbsp;원본 파일 열기
+                </a>
+                <strong>업로드 원본${record.source_kind === 'pdf' ? ' PDF' : ''}</strong>
+            </div>
+        ` : '');
+        attachZoomHandlers(document.getElementById('imageGrid'));
+        renderSubjectiveGrid(record);
+
+        const answers = Object.entries(record.answers || {}).sort((a, b) => Number(a[0]) - Number(b[0]));
+        document.getElementById('answerGrid').innerHTML = answers.map(([question, answer]) => `
+            <div class="answer-item">
+                <strong>Q${question}</strong>
+                <span>${answer || '-'}</span>
+            </div>
+        `).join('');
+    }
+
+    function closeDetail() {
+        document.getElementById('detailModal').style.display = 'none';
+        currentRecord = null;
+    }
+
+    function renderSubjectiveGrid(record) {
+        const images = (record.subjective_images || []).slice().sort((a, b) => Number(a.question_number) - Number(b.question_number));
+        const section = document.getElementById('subjectiveSection');
+        const grid = document.getElementById('subjectiveGrid');
+        subjectiveResults = { ...(record.subjective_results || {}) };
+
+        if (!images.length) {
+            section.style.display = 'none';
+            grid.innerHTML = '';
+            return;
+        }
+
+        section.style.display = 'block';
+        images.forEach(item => {
+            const key = String(item.question_number);
+            if (!subjectiveResults[key]) {
+                subjectiveResults[key] = { status: 'ungraded', score: 0, comment: '' };
+            }
+        });
+
+        grid.innerHTML = images.map(item => {
+            const key = String(item.question_number);
+            const result = subjectiveResults[key] || { status: 'ungraded', score: 0, comment: '' };
+            const status = result.status || 'ungraded';
+            const gradedClass = status !== 'ungraded' ? 'graded' : '';
+            return `
+                <article class="subjective-card ${gradedClass}" data-question="${key}">
+                    <img src="${item.url}" alt="Q${key} 주관식 답안" data-full-url="${escapeHtml(item.url)}">
+                    <h5>Q${key}</h5>
+                    <div class="subjective-actions">
+                        <button class="status-btn ${status === 'correct' ? 'active' : ''}" type="button" data-status="correct">맞음</button>
+                        <button class="status-btn ${status === 'wrong' ? 'active' : ''}" type="button" data-status="wrong">오답</button>
+                        <button class="status-btn ${status === 'ungraded' ? 'active' : ''}" type="button" data-status="ungraded">미채점</button>
+                    </div>
+                    <div class="subjective-score-row">
+                        <label for="subjective_score_${key}">점수</label>
+                        <input id="subjective_score_${key}" type="number" min="0" step="0.1" value="${Number(result.score || 0)}" data-score-input>
+                    </div>
+                </article>
+            `;
+        }).join('');
+
+        grid.querySelectorAll('.status-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const card = button.closest('.subjective-card');
+                setSubjectiveStatus(card.dataset.question, button.dataset.status);
+            });
+        });
+        grid.querySelectorAll('[data-score-input]').forEach(input => {
+            input.addEventListener('input', () => {
+                const question = input.closest('.subjective-card').dataset.question;
+                const current = subjectiveResults[question] || { status: 'ungraded', score: 0, comment: '' };
+                subjectiveResults[question] = { ...current, score: Number(input.value || 0) };
+                updateSubjectiveSummary();
+            });
+        });
+        attachZoomHandlers(grid);
+        updateSubjectiveSummary();
+    }
+
+    function setSubjectiveStatus(question, status) {
+        const card = document.querySelector(`.subjective-card[data-question="${question}"]`);
+        if (!card) return;
+        const input = card.querySelector('[data-score-input]');
+        const currentScore = Number(input.value || 0);
+        const nextScore = status === 'correct' ? (currentScore || 1) : 0;
+        input.value = nextScore;
+        subjectiveResults[question] = {
+            ...(subjectiveResults[question] || {}),
+            status,
+            score: nextScore
+        };
+        card.classList.toggle('graded', status !== 'ungraded');
+        card.querySelectorAll('.status-btn').forEach(button => {
+            button.classList.toggle('active', button.dataset.status === status);
+        });
+        updateSubjectiveSummary();
+    }
+
+    function updateSubjectiveSummary() {
+        const items = Object.values(subjectiveResults);
+        const graded = items.filter(item => (item.status || 'ungraded') !== 'ungraded').length;
+        const score = items.reduce((sum, item) => sum + Number(item.score || 0), 0);
+        document.getElementById('subjectiveSummary').textContent = `${graded}/${items.length}문항 채점 · 주관식 ${score.toFixed(1)}점`;
+    }
+
+    async function saveSubjectiveGrading() {
+        if (!currentRecord) return;
+        const response = await fetch('{{ url_for("save_subjective_grading_route") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                record_id: currentRecord.id,
+                subjective_results: subjectiveResults
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            currentRecord.subjective_results = data.subjective_results;
+            currentRecord.objective_score = data.objective_score;
+            currentRecord.total_score = data.total_score;
+            document.getElementById('objectiveScoreInput').value = data.objective_score || 0;
+            alert('주관식 채점이 저장되었습니다.');
+        } else {
+            alert('주관식 채점 저장에 실패했습니다.');
+        }
+    }
+
+    async function saveObjectiveScore() {
+        if (!currentRecord) return;
+        const objectiveScore = document.getElementById('objectiveScoreInput').value;
+        const form = new URLSearchParams({
+            record_id: currentRecord.id,
+            objective_score: objectiveScore
+        });
+        const response = await fetch('{{ url_for("save_objective_score_route") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: form
+        });
+        const data = await response.json();
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('점수 저장에 실패했습니다.');
+        }
+    }
+
+    async function deleteRecord(recordId) {
+        if (!confirm('이 기록을 삭제하시겠습니까?')) return;
+        const response = await fetch(`/admin/delete/${recordId}`);
+        const data = await response.json();
+        if (data.success) {
+            location.reload();
+        }
+    }
+
+    function translateField(field) {
+        const labels = {
+            department: '학과 필드',
+            student_id: '학번 필드',
+            grade: '학년 필드',
+            name: '이름 필드'
+        };
+        return labels[field] || field;
+    }
+
+    function attachZoomHandlers(root) {
+        root.querySelectorAll('img[data-full-url]').forEach(image => {
+            image.addEventListener('click', () => openImageLightbox(image.dataset.fullUrl));
+        });
+    }
+
+    function openImageLightbox(url) {
+        const lightbox = document.getElementById('imageLightbox');
+        document.getElementById('lightboxImage').src = url;
+        lightbox.style.display = 'flex';
+    }
+
+    function closeImageLightbox() {
+        const lightbox = document.getElementById('imageLightbox');
+        lightbox.style.display = 'none';
+        document.getElementById('lightboxImage').src = '';
+    }
+
+    document.getElementById('detailModal').addEventListener('click', event => {
+        if (event.target.id === 'detailModal') closeDetail();
+    });
+    document.getElementById('imageLightbox').addEventListener('click', event => {
+        if (event.target.id === 'imageLightbox') closeImageLightbox();
+    });
+</script>
+{% endblock %}

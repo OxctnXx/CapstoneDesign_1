@@ -1,0 +1,26 @@
+# Python runtime artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+
+# Virtual environments and IDE settings
+.venv/
+venv/
+.idea/
+
+# Local application data
+users.db
+*.sqlite
+*.sqlite3
+uploads/
+results/
+server_stdout.log
+server_stderr.log
+
+# Runtime-generated OMR previews/templates
+static/generated/
+
+# OS noise
+.DS_Store
+Thumbs.db

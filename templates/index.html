@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title or 'OMR 관리 시스템' }}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css">
+    <style>
+        :root {
+            --bg: #f3f7fb;
+            --panel: #ffffff;
+            --line: #dbe6f0;
+            --text: #15202b;
+            --muted: #627486;
+            --brand: #165dff;
+            --brand-strong: #0c44c7;
+            --success: #0f9d58;
+            --danger: #d93025;
+            --accent: #ff8f00;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "Malgun Gothic", sans-serif;
+            background: linear-gradient(135deg, #f7fbff 0%, #eef4fa 48%, #e7eff8 100%);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .shell {
+            min-height: 100vh;
+            display: grid;
+            grid-template-columns: 270px 1fr;
+        }
+
+        .sidebar {
+            background: #102a49;
+            color: #fff;
+            padding: 26px 18px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+        }
+
+        .brand {
+            padding: 6px 8px 22px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+            margin-bottom: 20px;
+        }
+
+        .brand h1 {
+            font-size: 22px;
+            margin: 0 0 8px;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .brand p {
+            margin: 0;
+            color: rgba(255, 255, 255, 0.74);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .menu {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .menu a {
+            color: rgba(255, 255, 255, 0.88);
+            text-decoration: none;
+            padding: 13px 14px;
+            border-radius: 8px;
+            transition: 0.18s ease;
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            font-weight: 600;
+        }
+
+        .menu a:hover,
+        .menu a.active {
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+        }
+
+        .main {
+            padding: 26px;
+            min-width: 0;
+        }
+
+        .topbar {
+            background: rgba(255, 255, 255, 0.86);
+            border: 1px solid rgba(219, 230, 240, 0.95);
+            backdrop-filter: blur(14px);
+            border-radius: 8px;
+            padding: 18px 22px;
+            margin-bottom: 22px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 10px 24px rgba(25, 52, 84, 0.07);
+        }
+
+        .topbar h2 {
+            margin: 0;
+            font-size: 25px;
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .topbar p {
+            margin: 6px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .user-badge {
+            background: #f7fbff;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            padding: 11px 14px;
+            min-width: 200px;
+        }
+
+        .user-badge .name {
+            font-weight: 800;
+            display: block;
+        }
+
+        .user-badge .meta {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .flash-stack {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .flash {
+            border-radius: 8px;
+            padding: 13px 15px;
+            font-size: 14px;
+            border: 1px solid transparent;
+        }
+
+        .flash.success {
+            background: #effaf4;
+            color: #0b6b3a;
+            border-color: #bde5cc;
+        }
+
+        .flash.error {
+            background: #fff1f0;
+            color: #a61d24;
+            border-color: #f3c0bc;
+        }
+
+        .card-panel {
+            background: var(--panel);
+            border: 1px solid rgba(219, 230, 240, 0.95);
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(23, 44, 71, 0.06);
+        }
+
+        @media (max-width: 992px) {
+            .shell {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                height: auto;
+                position: static;
+            }
+
+            .main {
+                padding: 18px;
+            }
+
+            .topbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .user-badge {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <h1>OMR Studio</h1>
+            <p>답안지 양식 생성, 업로드 채점, 학생 성적 관리를 한 곳에서 처리합니다.</p>
+        </div>
+
+        <nav class="menu">
+            {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' or request.endpoint == 'exam_page' %}active{% endif %}">
+                <i class="fa fa-tachometer"></i><span>시험 관리</span>
+            </a>
+            <a href="{{ url_for('recognition_history') }}" class="{% if request.endpoint == 'recognition_history' %}active{% endif %}">
+                <i class="fa fa-history"></i><span>채점 이력</span>
+            </a>
+            <a href="{{ url_for('admin_stats') }}" class="{% if request.endpoint == 'admin_stats' %}active{% endif %}">
+                <i class="fa fa-line-chart"></i><span>통계</span>
+            </a>
+            <a href="{{ url_for('admin_users') }}" class="{% if request.endpoint == 'admin_users' %}active{% endif %}">
+                <i class="fa fa-users"></i><span>사용자 관리</span>
+            </a>
+            <a href="{{ url_for('profile_admin') }}" class="{% if request.endpoint == 'profile_admin' or request.endpoint == 'profile' %}active{% endif %}">
+                <i class="fa fa-user"></i><span>관리자 정보</span>
+            </a>
+            {% else %}
+            <a href="{{ url_for('student_scores') }}" class="{% if request.endpoint == 'student_scores' %}active{% endif %}">
+                <i class="fa fa-book"></i><span>내 성적</span>
+            </a>
+            <a href="{{ url_for('profile') }}" class="{% if request.endpoint == 'profile' %}active{% endif %}">
+                <i class="fa fa-user"></i><span>내 정보</span>
+            </a>
+            {% endif %}
+
+            <a href="{{ url_for('logout') }}">
+                <i class="fa fa-sign-out"></i><span>로그아웃</span>
+            </a>
+        </nav>
+    </aside>
+
+    <main class="main">
+        <section class="topbar">
+            <div>
+                <h2>{% block page_title %}관리 화면{% endblock %}</h2>
+                <p>{% block page_subtitle %}OMR 인식과 채점 흐름을 관리합니다.{% endblock %}</p>
+            </div>
+            <div class="user-badge">
+                <span class="name">{{ user.name if user else current_user.name }}</span>
+                <span class="meta">
+                    {% if current_user.role == 'admin' %}
+                    관리자 계정
+                    {% else %}
+                    {{ current_user.student_id }}
+                    {% endif %}
+                </span>
+            </div>
+        </section>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-stack">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>
