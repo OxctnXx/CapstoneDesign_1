@@ -27,6 +27,9 @@ from flask_login import (
     logout_user,
 )
 from reportlab.lib.pagesizes import A4
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 from werkzeug.security import check_password_hash
 from functools import wraps
@@ -83,6 +86,14 @@ UPLOAD_DIR = BASE_DIR / "uploads"
 RESULT_DIR = BASE_DIR / "results"
 STATIC_DIR = BASE_DIR / "static"
 GENERATED_DIR = STATIC_DIR / "generated"
+REPORT_FONT_NAME = "OMRReportFont"
+REPORT_FONT_BOLD_NAME = "OMRReportFontBold"
+REPORT_TTF_CANDIDATES = [
+    (BASE_DIR / "malgun.ttf", BASE_DIR / "malgunbd.ttf"),
+    (STATIC_DIR / "fonts" / "malgun.ttf", STATIC_DIR / "fonts" / "malgunbd.ttf"),
+    (Path("C:/Windows/Fonts/malgun.ttf"), Path("C:/Windows/Fonts/malgunbd.ttf")),
+]
+REPORT_CID_FONT_CANDIDATES = ["HYGothic-Medium", "HYSMyeongJo-Medium"]
 DEFAULT_TEMPLATE_NAME = "OMR 종합설계 답안지"
 DEFAULT_TEMPLATE_FILE = BASE_DIR / "OMR 종합설계 답안지.pdf"
 DEFAULT_TEMPLATE_PREVIEW_REL = "generated/default_template_preview.png"
@@ -140,6 +151,36 @@ def student_required(view_func):
         return view_func(*args, **kwargs)
 
     return wrapper
+
+
+def _register_ttf_font(font_name, font_path):
+    try:
+        pdfmetrics.getFont(font_name)
+    except KeyError:
+        pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+
+
+def get_report_pdf_fonts():
+    for regular_path, bold_path in REPORT_TTF_CANDIDATES:
+        if not regular_path.exists():
+            continue
+        _register_ttf_font(REPORT_FONT_NAME, regular_path)
+        if bold_path.exists():
+            _register_ttf_font(REPORT_FONT_BOLD_NAME, bold_path)
+            return REPORT_FONT_NAME, REPORT_FONT_BOLD_NAME
+        return REPORT_FONT_NAME, REPORT_FONT_NAME
+
+    for cid_font_name in REPORT_CID_FONT_CANDIDATES:
+        try:
+            pdfmetrics.getFont(cid_font_name)
+        except KeyError:
+            try:
+                pdfmetrics.registerFont(UnicodeCIDFont(cid_font_name))
+            except Exception:
+                continue
+        return cid_font_name, cid_font_name
+
+    return "Helvetica", "Helvetica-Bold"
 
 
 def allowed_file(filename):
@@ -345,17 +386,66 @@ def record_view_model(row):
     data["original_url"] = url_for("uploaded_file", filename=row["original_image"]) if row["original_image"] else ""
     data["source_url"] = url_for("uploaded_file", filename=row["source_filename"]) if row["source_filename"] else ""
     data["choice_url"] = url_for("result_file", filename=row["cropped_choice_image"]) if row["cropped_choice_image"] else ""
+    if "answer_key_json" in row.keys() and row["answer_key_json"]:
+        data["answer_key"] = parse_answer_key_json(row["answer_key_json"])
+        data["answer_rows"] = build_answer_rows(data["answers"], data["answer_key"])
     return data
 
 
-def prefer_ocr_fields(raw_fields, account_fields=None):
+def normalize_answer_payload(answer_map):
+    normalized = {}
+    for key, value in (answer_map or {}).items():
+        try:
+            normalized[int(key)] = value
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
+def build_answer_rows(student_answers, answer_key):
+    student_lookup = normalize_answer_payload(student_answers)
+    answer_lookup = normalize_answer_payload(answer_key)
+    rows = []
+    for question_number in sorted(answer_lookup.keys()):
+        student_answer = student_lookup.get(question_number)
+        correct_answer = answer_lookup.get(question_number)
+        if student_answer in {None, ""}:
+            status = "unanswered"
+        elif str(student_answer) == str(correct_answer):
+            status = "correct"
+        else:
+            status = "wrong"
+        rows.append(
+            {
+                "question_number": question_number,
+                "student_answer": student_answer or "",
+                "correct_answer": correct_answer or "",
+                "status": status,
+            }
+        )
+    return rows
+
+
+def prefer_ocr_fields(raw_fields, account_fields=None, account_result=None):
     raw_fields = raw_fields or {}
     account_fields = account_fields or {}
+    account_result = account_result or {}
+    trust_account = (
+        account_result.get("matched_by") in {"student_id_exact", "student_id_near", "profile_match"}
+        and bool(account_fields)
+        and not account_result.get("auto_created")
+    )
     merged = {}
     for key in ["department", "student_id", "grade", "name"]:
         raw_value = (raw_fields.get(key) or "").strip()
         account_value = (account_fields.get(key) or "").strip()
-        merged[key] = raw_value or account_value
+        if trust_account and account_value:
+            merged[key] = account_value
+            continue
+        if raw_value:
+            merged[key] = raw_value
+        else:
+            merged[key] = account_value or raw_value
     return merged
 
 
@@ -661,6 +751,7 @@ def upload_exam_file(exam_id):
     recognized = prefer_ocr_fields(
         raw_recognized,
         account_result["resolved_fields"] if account_result else {},
+        account_result,
     )
     if student_user:
         student_user = get_user_by_id(student_user["id"])
@@ -730,6 +821,8 @@ def upload_exam_file(exam_id):
     )
 
     current_record = get_record_by_id(record_id)
+    current_view = record_view_model(current_record) if current_record else None
+    answer_rows = build_answer_rows(result["student_answers"], answer_key)
 
     return jsonify(
         {
@@ -743,9 +836,12 @@ def upload_exam_file(exam_id):
             "sheet_images": sheet_images,
             "subjective_images": subjective_images,
             "subjective_results": {},
+            "answer_rows": answer_rows,
             "annotated_image": url_for("result_file", filename=annotated_filename),
             "cropped_choice_image": url_for("result_file", filename=answer_area_filename),
             "original_image": url_for("uploaded_file", filename=original_preview_filename),
+            "objective_score": current_view["objective_score"] if current_view else 0,
+            "total_score": current_view["total_score"] if current_view else result["evaluation"]["percentage"],
             "account_match": ocr_payload["account_match"],
             "auto_account_created": bool(account_result and account_result["created"]),
             "auto_replaced_record_ids": auto_replaced_record_ids,
@@ -791,7 +887,22 @@ def resolve_duplicate_records():
 @admin_required
 def recognition_history():
     search = request.args.get("search", "").strip()
-    records = [record_view_model(row) for row in get_all_records_admin(search)]
+    records = []
+    answer_key_cache = {}
+    for row in get_all_records_admin(search):
+        view = record_view_model(row)
+        exam_id = view.get("exam_id")
+        if exam_id:
+            if exam_id not in answer_key_cache:
+                exam_row = get_exam(exam_id)
+                answer_key_cache[exam_id] = (
+                    parse_answer_key_json(exam_row["answer_key_json"])
+                    if exam_row and exam_row.get("answer_key_json")
+                    else {}
+                )
+            view["answer_key"] = answer_key_cache[exam_id]
+            view["answer_rows"] = build_answer_rows(view["answers"], view["answer_key"])
+        records.append(view)
     return render_template("recognition_history.html", user=current_user, records=records, search=search)
 
 
@@ -805,7 +916,9 @@ def admin_update_record():
     grade = request.form.get("grade", "").strip()
     department = request.form.get("department", "").strip()
     update_record_student_info(record_id, name, student_id, grade, department)
-    return jsonify({"success": True})
+    record = get_record_by_id(record_id)
+    view = record_view_model(record) if record else None
+    return jsonify({"success": True, "record": view})
 
 
 @app.route("/admin/delete/<int:record_id>")
@@ -1041,14 +1154,15 @@ def export_pdf(record_id):
 
     buffer = BytesIO()
     pdf = canvas.Canvas(buffer, pagesize=A4)
+    body_font, bold_font = get_report_pdf_fonts()
     width, height = A4
     y = height - 48
 
-    pdf.setFont("Helvetica-Bold", 16)
+    pdf.setFont(bold_font, 16)
     pdf.drawString(50, y, "OMR Grading Report")
     y -= 28
 
-    pdf.setFont("Helvetica", 11)
+    pdf.setFont(body_font, 11)
     lines = [
         f"Exam: {view.get('exam_title') or view.get('subject')}",
         f"Template: {view.get('template_name') or ''}",
@@ -1063,10 +1177,10 @@ def export_pdf(record_id):
         y -= 18
 
     y -= 8
-    pdf.setFont("Helvetica-Bold", 12)
+    pdf.setFont(bold_font, 12)
     pdf.drawString(50, y, "Recognized Answers")
     y -= 20
-    pdf.setFont("Helvetica", 10)
+    pdf.setFont(body_font, 10)
 
     items = sorted(((int(key), value) for key, value in answers.items()), key=lambda item: item[0])
     for question_number, answer in items:
@@ -1075,7 +1189,7 @@ def export_pdf(record_id):
         if y < 50:
             pdf.showPage()
             y = height - 50
-            pdf.setFont("Helvetica", 10)
+            pdf.setFont(body_font, 10)
 
     pdf.save()
     payload = buffer.getvalue()
@@ -1203,8 +1317,25 @@ def export_batch_results():
                 "Wrong": evaluation.get("wrong", 0),
                 "Unanswered": evaluation.get("unanswered", 0),
                 "Score (%)": evaluation.get("percentage", 0),
+                "Manual Score": item.get("objective_score", 0),
+                "Total Score": item.get("total_score", evaluation.get("percentage", 0)),
             }
         )
+        answer_details = item.get("answer_rows") or []
+        if answer_details:
+            for answer_detail in answer_details:
+                answer_rows.append(
+                    {
+                        "File Name": item.get("fileName"),
+                        "Student ID": fields.get("student_id", ""),
+                        "Question": int(answer_detail.get("question_number", 0)),
+                        "Answer": answer_detail.get("student_answer"),
+                        "Correct Answer": answer_detail.get("correct_answer"),
+                        "Status": answer_detail.get("status"),
+                    }
+                )
+            continue
+
         for question_number, answer in sorted(item.get("student_answers", {}).items(), key=lambda row: int(row[0])):
             answer_rows.append(
                 {
@@ -1234,4 +1365,4 @@ with app.app_context():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="127.0.0.1", port=5002)
+    app.run(debug=True, host="127.0.0.1", port=5003)

@@ -711,6 +711,7 @@ class OCRService:
             if field_type == "student_id":
                 alnum_count = len(re.findall(r"[A-Z0-9]", normalized))
                 digit_count = len(re.findall(r"\d", normalized))
+                alpha_count = len(re.findall(r"[A-Z]", normalized))
                 score += min(alnum_count, 14) * 0.18
                 if 6 <= alnum_count <= 12:
                     score += 2.0
@@ -718,6 +719,10 @@ class OCRService:
                     score += 1.0
                 if digit_count >= 4:
                     score += 0.5
+                if alpha_count == 0 and digit_count >= 4:
+                    score += 0.9
+                elif alpha_count and digit_count >= 4:
+                    score -= alpha_count * 0.55
                 raw_tokens = re.findall(r"[A-Za-z0-9]+", raw_text)
                 if len(raw_tokens) > 1 and len(normalized) > max(len(token) for token in raw_tokens):
                     score -= 0.8
@@ -792,7 +797,7 @@ def normalize_field_text(field_type, text):
         cleaned = "".join(re.findall(r"[A-Za-z0-9]", text)).upper()
         digit_count = len(re.findall(r"\d", cleaned))
         if digit_count >= 3 and digit_count >= len(cleaned) * 0.55:
-            cleaned = cleaned.translate(str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8"}))
+            cleaned = cleaned.translate(str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "U": "1"}))
         return cleaned
     if field_type == "grade":
         digit_map = str.maketrans({"O": "0", "o": "0", "I": "1", "l": "1", "S": "5"})
@@ -831,19 +836,43 @@ def _strip_field_label(field_type, text):
 
 
 def parse_filename_hints(filename):
-    stem = Path(filename).stem
+    stem = unicodedata.normalize("NFKC", Path(filename).stem)
     parts = [part.strip() for part in stem.split("_") if part.strip()]
-    hints = {"name": "", "student_id": "", "grade": "", "department": ""}
-    if len(parts) >= 4:
-        hints["name"] = parts[0]
-        hints["student_id"] = parts[1]
-        hints["grade"] = parts[2]
-        hints["department"] = parts[3]
-    student_id_hint = "".join(re.findall(r"[A-Za-z0-9]", unicodedata.normalize("NFKC", hints["student_id"]))).upper()
-    if hints["student_id"] and len(student_id_hint) < 3:
-        return {"name": "", "student_id": "", "grade": "", "department": ""}
-    hints["student_id"] = student_id_hint or hints["student_id"]
-    return hints
+    empty = {"name": "", "student_id": "", "grade": "", "department": ""}
+    if len(parts) != 4:
+        return empty
+
+    hints = {
+        "name": parts[0],
+        "student_id": parts[1],
+        "grade": parts[2],
+        "department": parts[3],
+    }
+    joined = " ".join(parts).lower()
+    if any(keyword in joined for keyword in ["양식", "template", "시험", "테스트", "omr", "page", "preview"]):
+        return empty
+
+    student_id_hint = normalize_field_text("student_id", hints["student_id"])
+    grade_hint = normalize_field_text("grade", hints["grade"])
+    department_hint = normalize_field_text("department", hints["department"])
+    name_hint = normalize_field_text("name", hints["name"])
+
+    digit_count = len(re.findall(r"\d", student_id_hint))
+    if len(student_id_hint) < 4 or digit_count < 3:
+        return empty
+    if not grade_hint.isdigit() or not 1 <= int(grade_hint) <= 12:
+        return empty
+    if not name_hint or not department_hint:
+        return empty
+    if re.fullmatch(r"\d{6,}", name_hint) or re.fullmatch(r"\d{6,}", department_hint):
+        return empty
+
+    return {
+        "name": name_hint,
+        "student_id": student_id_hint,
+        "grade": grade_hint,
+        "department": department_hint,
+    }
 
 
 def merge_fields(ocr_fields, filename_hints):

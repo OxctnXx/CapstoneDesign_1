@@ -221,6 +221,50 @@
         margin-bottom: 4px;
     }
 
+    .field-editor {
+        background: #f8fbff;
+        border: 1px solid #dfe9f3;
+        border-radius: 8px;
+        padding: 10px;
+    }
+
+    .field-editor span {
+        display: block;
+        color: #627486;
+        font-size: 12px;
+        margin-bottom: 6px;
+    }
+
+    .field-editor input {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid #d4dfeb;
+        border-radius: 8px;
+        padding: 9px 10px;
+        background: #fff;
+    }
+
+    .record-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 12px;
+    }
+
+    .record-message {
+        color: #627486;
+        font-size: 13px;
+    }
+
+    .record-message[data-tone="success"] {
+        color: #0b6b3a;
+    }
+
+    .record-message[data-tone="error"] {
+        color: #a61d24;
+    }
+
     .image-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -251,7 +295,7 @@
 
     .answer-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
         gap: 7px;
         margin-top: 12px;
     }
@@ -261,7 +305,6 @@
         border: 1px solid #dbe6f0;
         padding: 7px;
         background: #fff;
-        text-align: center;
         font-size: 12px;
     }
 
@@ -269,7 +312,147 @@
         display: block;
         font-size: 11px;
         color: #627486;
-        margin-bottom: 2px;
+        margin-bottom: 4px;
+    }
+
+    .answer-item span,
+    .answer-item em {
+        display: block;
+        font-style: normal;
+        line-height: 1.45;
+    }
+
+    .answer-item em {
+        margin-top: 5px;
+        font-weight: 700;
+    }
+
+    .answer-item.correct {
+        border-color: #b9e2c5;
+        background: #f4fbf6;
+    }
+
+    .answer-item.correct em {
+        color: #0b6b3a;
+    }
+
+    .answer-item.wrong {
+        border-color: #f6c89a;
+        background: #fff8f1;
+    }
+
+    .answer-item.wrong em {
+        color: #9a5200;
+    }
+
+    .answer-item.unanswered {
+        border-color: #d9e2ec;
+        background: #f8fbff;
+    }
+
+    .answer-item.unanswered em {
+        color: #627486;
+    }
+
+    .subjective-panel {
+        margin-top: 16px;
+        border-top: 1px solid #e5eef6;
+        padding-top: 14px;
+    }
+
+    .subjective-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+
+    .subjective-head strong {
+        font-size: 15px;
+    }
+
+    .subjective-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 12px;
+    }
+
+    .subjective-card {
+        border: 2px solid #dbe6f0;
+        border-radius: 12px;
+        padding: 10px;
+        background: #fff;
+    }
+
+    .subjective-card.graded {
+        border-color: #0f9d58;
+        box-shadow: 0 0 0 2px rgba(15, 157, 88, 0.12);
+    }
+
+    .subjective-card img {
+        width: 100%;
+        aspect-ratio: 5 / 2;
+        object-fit: contain;
+        border: 1px solid #e5eef6;
+        border-radius: 10px;
+        background: #f8fbff;
+        cursor: zoom-in;
+    }
+
+    .subjective-card h5 {
+        margin: 8px 0;
+        font-size: 14px;
+        font-weight: 800;
+    }
+
+    .subjective-actions {
+        display: flex;
+        gap: 7px;
+        flex-wrap: wrap;
+        margin: 8px 0;
+    }
+
+    .status-btn {
+        border: 1px solid #dbe6f0;
+        background: #f8fbff;
+        color: #35516c;
+        border-radius: 999px;
+        padding: 7px 9px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .status-btn.active[data-status="correct"] {
+        background: #effaf4;
+        border-color: #0f9d58;
+        color: #0b6b3a;
+    }
+
+    .status-btn.active[data-status="wrong"] {
+        background: #fff5e8;
+        border-color: #ff8f00;
+        color: #9a5200;
+    }
+
+    .status-btn.active[data-status="ungraded"] {
+        background: #eef4fb;
+        border-color: #9fb5ca;
+        color: #35516c;
+    }
+
+    .subjective-score-row {
+        display: grid;
+        grid-template-columns: 56px 1fr;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .subjective-score-row input {
+        width: 100%;
+        min-width: 0;
     }
 
     .modal-mask {
@@ -595,25 +778,277 @@
         window.URL.revokeObjectURL(url);
     });
 
+    function updateRawResult(recordId, patch) {
+        const index = rawResults.findIndex(item => Number(item.record_id) === Number(recordId));
+        if (index === -1) return;
+        rawResults[index] = { ...rawResults[index], ...patch };
+    }
+
+    function answerStatusLabel(status) {
+        const labels = {
+            correct: '정답',
+            wrong: '오답',
+            unanswered: '미응답',
+            recorded: '응답 기록'
+        };
+        return labels[status] || status || '-';
+    }
+
+    function getAnswerRows(data) {
+        if (Array.isArray(data.answer_rows) && data.answer_rows.length) {
+            return data.answer_rows.slice().sort((left, right) => Number(left.question_number) - Number(right.question_number));
+        }
+        return Object.entries(data.student_answers || {})
+            .sort((left, right) => Number(left[0]) - Number(right[0]))
+            .map(([question, answer]) => ({
+                question_number: Number(question),
+                student_answer: answer || '',
+                correct_answer: '',
+                status: answer ? 'recorded' : 'unanswered'
+            }));
+    }
+
+    function renderAnswerHtml(answerRows) {
+        if (!answerRows.length) {
+            return `
+                <div class="answer-item unanswered">
+                    <strong>답안 없음</strong>
+                    <span>-</span>
+                    <em>미기록</em>
+                </div>
+            `;
+        }
+        return answerRows.map(row => `
+            <div class="answer-item ${escapeHtml(row.status || 'recorded')}">
+                <strong>Q${escapeHtml(row.question_number)}</strong>
+                <span>작성: ${escapeHtml(row.student_answer || '-')}</span>
+                <span>정답: ${escapeHtml(row.correct_answer || '-')}</span>
+                <em>${escapeHtml(answerStatusLabel(row.status))}</em>
+            </div>
+        `).join('');
+    }
+
+    function ensureSubjectiveResults(images, storedResults) {
+        const next = JSON.parse(JSON.stringify(storedResults || {}));
+        (images || []).forEach(item => {
+            const key = String(item.question_number);
+            const current = next[key] || {};
+            const score = Number(current.score || 0);
+            next[key] = {
+                status: current.status || (score > 0 ? 'correct' : 'ungraded'),
+                score,
+                comment: current.comment || ''
+            };
+        });
+        return next;
+    }
+
+    function subjectiveCardHtml(item, result) {
+        const key = String(item.question_number);
+        const status = result.status || 'ungraded';
+        const gradedClass = status !== 'ungraded' ? 'graded' : '';
+        return `
+            <article class="subjective-card ${gradedClass}" data-question="${key}">
+                <img src="${item.url}" alt="Q${escapeHtml(key)} 주관식" data-full-url="${escapeHtml(item.url)}">
+                <h5>주관식 Q${escapeHtml(key)}</h5>
+                <div class="subjective-actions">
+                    <button class="status-btn ${status === 'correct' ? 'active' : ''}" type="button" data-status="correct">맞음</button>
+                    <button class="status-btn ${status === 'wrong' ? 'active' : ''}" type="button" data-status="wrong">오답</button>
+                    <button class="status-btn ${status === 'ungraded' ? 'active' : ''}" type="button" data-status="ungraded">미채점</button>
+                </div>
+                <div class="subjective-score-row">
+                    <label for="subjective_score_${escapeHtml(key)}">점수</label>
+                    <input id="subjective_score_${escapeHtml(key)}" type="number" min="0" step="0.1" value="${Number(result.score || 0)}" data-score-input>
+                </div>
+            </article>
+        `;
+    }
+
+    function setRecordMessage(card, message, tone = 'info') {
+        const node = card.querySelector('[data-record-message]');
+        if (!node) return;
+        node.textContent = message || '';
+        node.dataset.tone = tone;
+    }
+
+    function updateCardTotals(card, manualScore, totalScore) {
+        const manualNode = card.querySelector('[data-manual-score]');
+        const totalNode = card.querySelector('[data-total-score]');
+        if (manualNode) manualNode.textContent = Number(manualScore || 0).toFixed(1);
+        if (totalNode) totalNode.textContent = Number(totalScore || 0).toFixed(1);
+    }
+
+    function updateCardSubjectiveSummary(card) {
+        const state = card._recordState || { subjectiveResults: {} };
+        const items = Object.values(state.subjectiveResults || {});
+        const graded = items.filter(item => (item.status || 'ungraded') !== 'ungraded').length;
+        const score = items.reduce((sum, item) => sum + Number(item.score || 0), 0);
+        const summaryNode = card.querySelector('[data-subjective-summary]');
+        if (summaryNode) {
+            summaryNode.textContent = `${graded}/${items.length}문항 채점 · ${score.toFixed(1)}점`;
+        }
+        const baseScore = Number(card.dataset.baseScore || 0);
+        updateCardTotals(card, score, baseScore + score);
+    }
+
+    function setCardSubjectiveStatus(card, question, status) {
+        const state = card._recordState;
+        if (!state) return;
+        const cardNode = card.querySelector(`.subjective-card[data-question="${question}"]`);
+        if (!cardNode) return;
+        const input = cardNode.querySelector('[data-score-input]');
+        const currentScore = Number(input.value || 0);
+        const nextScore = status === 'correct' ? (currentScore || 1) : 0;
+        input.value = nextScore;
+        state.subjectiveResults[question] = {
+            ...(state.subjectiveResults[question] || {}),
+            status,
+            score: nextScore
+        };
+        cardNode.classList.toggle('graded', status !== 'ungraded');
+        cardNode.querySelectorAll('.status-btn').forEach(button => {
+            button.classList.toggle('active', button.dataset.status === status);
+        });
+        updateCardSubjectiveSummary(card);
+    }
+
+    async function saveRecordStudentInfo(card) {
+        const button = card.querySelector('[data-save-student]');
+        const recordId = Number(card.dataset.recordId);
+        const payload = new URLSearchParams({
+            id: recordId,
+            department: card.querySelector('[name="department"]').value,
+            student_id: card.querySelector('[name="student_id"]').value,
+            grade: card.querySelector('[name="grade"]').value,
+            name: card.querySelector('[name="name"]').value
+        });
+        const originalText = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fa fa-spinner fa-spin"></i>저장 중...';
+
+        try {
+            const response = await fetch('{{ url_for("admin_update_record") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: payload
+            });
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.error || '학생 정보 저장에 실패했습니다.');
+            }
+            const updatedFields = (((result.record || {}).ocr || {}).fields) || {
+                department: card.querySelector('[name="department"]').value,
+                student_id: card.querySelector('[name="student_id"]').value,
+                grade: card.querySelector('[name="grade"]').value,
+                name: card.querySelector('[name="name"]').value
+            };
+            updateRawResult(recordId, { recognized_fields: updatedFields });
+            setRecordMessage(card, '학생 정보를 저장했습니다.', 'success');
+        } catch (error) {
+            setRecordMessage(card, error.message, 'error');
+        } finally {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
+    }
+
+    async function saveCardSubjectiveGrading(card) {
+        const button = card.querySelector('[data-save-subjective]');
+        if (!button || !card._recordState) return;
+        const recordId = Number(card.dataset.recordId);
+        const originalText = button.innerHTML;
+        button.disabled = true;
+        button.innerHTML = '<i class="fa fa-spinner fa-spin"></i>저장 중...';
+
+        try {
+            const response = await fetch('{{ url_for("save_subjective_grading_route") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    record_id: recordId,
+                    subjective_results: card._recordState.subjectiveResults
+                })
+            });
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error('주관식 점수 저장에 실패했습니다.');
+            }
+            card._recordState.subjectiveResults = ensureSubjectiveResults(
+                card._recordState.subjectiveImages,
+                result.subjective_results
+            );
+            updateCardTotals(card, result.objective_score, result.total_score);
+            const summaryNode = card.querySelector('[data-subjective-summary]');
+            if (summaryNode) {
+                const items = Object.values(card._recordState.subjectiveResults || {});
+                const graded = items.filter(item => (item.status || 'ungraded') !== 'ungraded').length;
+                summaryNode.textContent = `${graded}/${items.length}문항 채점 · ${Number(result.objective_score || 0).toFixed(1)}점`;
+            }
+            updateRawResult(recordId, {
+                subjective_results: result.subjective_results,
+                objective_score: result.objective_score,
+                total_score: result.total_score
+            });
+            setRecordMessage(card, '주관식 점수를 저장했습니다.', 'success');
+        } catch (error) {
+            setRecordMessage(card, error.message, 'error');
+        } finally {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
+    }
+
+    function attachRecordHandlers(card) {
+        const saveStudentButton = card.querySelector('[data-save-student]');
+        if (saveStudentButton) {
+            saveStudentButton.addEventListener('click', () => saveRecordStudentInfo(card));
+        }
+
+        card.querySelectorAll('.status-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const subjectiveCard = button.closest('.subjective-card');
+                setCardSubjectiveStatus(card, subjectiveCard.dataset.question, button.dataset.status);
+            });
+        });
+
+        card.querySelectorAll('[data-score-input]').forEach(input => {
+            input.addEventListener('input', () => {
+                const state = card._recordState;
+                if (!state) return;
+                const question = input.closest('.subjective-card').dataset.question;
+                const current = state.subjectiveResults[question] || { status: 'ungraded', score: 0, comment: '' };
+                const score = Number(input.value || 0);
+                const status = current.status === 'ungraded' && score > 0 ? 'correct' : current.status;
+                state.subjectiveResults[question] = { ...current, status, score };
+                input.closest('.subjective-card').classList.toggle('graded', status !== 'ungraded');
+                input.closest('.subjective-card').querySelectorAll('.status-btn').forEach(button => {
+                    button.classList.toggle('active', button.dataset.status === status);
+                });
+                updateCardSubjectiveSummary(card);
+            });
+        });
+
+        const saveSubjectiveButton = card.querySelector('[data-save-subjective]');
+        if (saveSubjectiveButton) {
+            saveSubjectiveButton.addEventListener('click', () => saveCardSubjectiveGrading(card));
+        }
+    }
+
     function appendResultCard(fileName, data) {
         const fields = data.recognized_fields || {};
         const evalData = data.evaluation || {};
-        const answers = Object.entries(data.student_answers || {}).sort((a, b) => Number(a[0]) - Number(b[0]));
+        const answerRows = getAnswerRows(data);
         const fieldImages = data.field_images || [];
         const sheetImages = data.sheet_images || [];
         const subjectiveImages = data.subjective_images || [];
+        const initialManualScore = Number(data.objective_score || 0);
+        const initialTotalScore = Number(data.total_score || evalData.percentage || 0);
+        const subjectiveResults = ensureSubjectiveResults(subjectiveImages, data.subjective_results || {});
 
         const fieldImageHtml = fieldImages.map(item => `
             <div class="image-box">
                 <img src="${item.url}" alt="${escapeHtml(item.field)}" data-full-url="${escapeHtml(item.url)}">
                 <strong>${translateField(item.field)}</strong>
-            </div>
-        `).join('');
-
-        const subjectiveImageHtml = subjectiveImages.map(item => `
-            <div class="image-box">
-                <img src="${item.url}" alt="Q${escapeHtml(item.question_number)} 주관식" data-full-url="${escapeHtml(item.url)}">
-                <strong>주관식 Q${escapeHtml(item.question_number)}</strong>
             </div>
         `).join('');
 
@@ -624,16 +1059,29 @@
             </div>
         `).join('');
 
-        const answerHtml = answers.map(([question, answer]) => `
-            <div class="answer-item">
-                <strong>Q${escapeHtml(question)}</strong>
-                <span>${escapeHtml(answer || '-')}</span>
+        const subjectivePanelHtml = subjectiveImages.length ? `
+            <div class="subjective-panel">
+                <div class="subjective-head">
+                    <strong>주관식 문항별 채점</strong>
+                    <span data-subjective-summary></span>
+                </div>
+                <div class="subjective-grid">
+                    ${subjectiveImages.map(item => subjectiveCardHtml(item, subjectiveResults[String(item.question_number)] || { status: 'ungraded', score: 0, comment: '' })).join('')}
+                </div>
+                <div class="record-actions">
+                    <button class="btn-main" type="button" data-save-subjective><i class="fa fa-save"></i>주관식 점수 저장</button>
+                </div>
             </div>
-        `).join('');
+        ` : '';
 
         const card = document.createElement('article');
         card.className = `record-card ${data.duplicate_conflict ? 'duplicate-pending' : ''}`;
         card.dataset.recordId = data.record_id;
+        card.dataset.baseScore = String(initialTotalScore - initialManualScore);
+        card._recordState = {
+            subjectiveImages,
+            subjectiveResults
+        };
         card.innerHTML = `
             <div class="record-head">
                 <div>
@@ -644,10 +1092,27 @@
             </div>
 
             <div class="field-grid">
-                <div class="field-item"><span>학과</span><strong>${escapeHtml(fields.department || '-')}</strong></div>
-                <div class="field-item"><span>학번</span><strong>${escapeHtml(fields.student_id || '-')}</strong></div>
-                <div class="field-item"><span>학년</span><strong>${escapeHtml(fields.grade || '-')}</strong></div>
-                <div class="field-item"><span>이름</span><strong>${escapeHtml(fields.name || '-')}</strong></div>
+                <label class="field-editor">
+                    <span>학과</span>
+                    <input type="text" name="department" value="${escapeHtml(fields.department || '')}" placeholder="학과">
+                </label>
+                <label class="field-editor">
+                    <span>학번</span>
+                    <input type="text" name="student_id" value="${escapeHtml(fields.student_id || '')}" placeholder="학번">
+                </label>
+                <label class="field-editor">
+                    <span>학년</span>
+                    <input type="text" name="grade" value="${escapeHtml(fields.grade || '')}" placeholder="학년">
+                </label>
+                <label class="field-editor">
+                    <span>이름</span>
+                    <input type="text" name="name" value="${escapeHtml(fields.name || '')}" placeholder="이름">
+                </label>
+            </div>
+
+            <div class="record-actions">
+                <button class="btn-sub" type="button" data-save-student><i class="fa fa-save"></i>학생 정보 저장</button>
+                <span class="record-message" data-record-message></span>
             </div>
 
             <div class="score-grid" style="margin-top:11px;">
@@ -655,6 +1120,8 @@
                 <div class="score-item"><span>정답</span><strong style="color:#0f9d58;">${evalData.correct || 0}</strong></div>
                 <div class="score-item"><span>오답</span><strong style="color:#d93025;">${evalData.wrong || 0}</strong></div>
                 <div class="score-item"><span>미응답</span><strong style="color:#ff8f00;">${evalData.unanswered || 0}</strong></div>
+                <div class="score-item"><span>주관식 점수</span><strong data-manual-score>${initialManualScore.toFixed(1)}</strong></div>
+                <div class="score-item"><span>최종 총점</span><strong data-total-score>${initialTotalScore.toFixed(1)}</strong></div>
             </div>
 
             <div class="image-grid">
@@ -672,14 +1139,17 @@
                     <strong>채점 표시</strong>
                 </div>
                 ${fieldImageHtml}
-                ${subjectiveImageHtml}
             </div>
 
-            <div class="answer-grid">${answerHtml}</div>
+            ${subjectivePanelHtml}
+
+            <div class="answer-grid">${renderAnswerHtml(answerRows)}</div>
         `;
 
         resultsBox.prepend(card);
         attachZoomHandlers(card);
+        attachRecordHandlers(card);
+        updateCardSubjectiveSummary(card);
     }
 
     function appendErrorCard(fileName, errorMessage) {

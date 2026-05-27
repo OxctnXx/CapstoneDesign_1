@@ -22,6 +22,7 @@ server_stderr.log
 
 # Runtime-generated OMR previews/templates
 static/generated/
+outputs/
 
 # OS noise
 .DS_Store

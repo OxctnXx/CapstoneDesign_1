@@ -158,7 +158,7 @@ def _normalize_student_id(value):
     cleaned = "".join(re.findall(r"[A-Za-z0-9]", text)).upper()
     digit_count = len(re.findall(r"\d", cleaned))
     if digit_count >= 3 and digit_count >= len(cleaned) * 0.55:
-        cleaned = cleaned.translate(str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8"}))
+        cleaned = cleaned.translate(str.maketrans({"O": "0", "I": "1", "L": "1", "S": "5", "B": "8", "U": "1"}))
     return cleaned
 
 
@@ -231,6 +231,7 @@ def _match_existing_student(conn, student_id="", name="", grade="", department="
     normalized_grade = _normalize_grade(grade)
     normalized_department = _normalize_profile_text(department)
 
+    rows = None
     if normalized_student_id:
         exact = conn.execute(
             "SELECT * FROM users WHERE role = 'user' AND UPPER(student_id) = ?",
@@ -239,11 +240,37 @@ def _match_existing_student(conn, student_id="", name="", grade="", department="
         if exact:
             return exact, "student_id_exact", {"distance": 0}
 
+        rows = conn.execute("SELECT * FROM users WHERE role = 'user' ORDER BY id DESC").fetchall()
+        near_candidates = []
+        for row in rows:
+            student_id_key = _normalize_student_id(row["student_id"])
+            distance = _digit_distance(normalized_student_id, student_id_key)
+            if distance is None:
+                continue
+            if distance == 1 and len(normalized_student_id) >= 5:
+                near_candidates.append({"row": row, "distance": distance})
+            elif distance == 2 and len(normalized_student_id) >= 8:
+                near_candidates.append({"row": row, "distance": distance})
+
+        if near_candidates:
+            near_candidates.sort(
+                key=lambda item: (
+                    item["distance"],
+                    -len(_normalize_student_id(item["row"]["student_id"])),
+                    item["row"]["id"],
+                )
+            )
+            best = near_candidates[0]
+            second = near_candidates[1] if len(near_candidates) > 1 else None
+            if not second or second["distance"] > best["distance"]:
+                return best["row"], "student_id_near", {"distance": best["distance"]}
+
     if not normalized_name:
         return None, "unresolved", {}
 
     candidates = []
-    rows = conn.execute("SELECT * FROM users WHERE role = 'user' ORDER BY id DESC").fetchall()
+    if rows is None:
+        rows = conn.execute("SELECT * FROM users WHERE role = 'user' ORDER BY id DESC").fetchall()
     for row in rows:
         name_key = _normalize_profile_text(row["name"])
         if name_key != normalized_name:
@@ -950,6 +977,7 @@ def update_subjective_grading(record_id, subjective_results):
             score_value = float(item.get("score") or 0)
         except (TypeError, ValueError):
             score_value = 0.0
+        score_value = max(0.0, score_value)
         if status == "ungraded":
             score_value = 0.0
         manual_score += score_value

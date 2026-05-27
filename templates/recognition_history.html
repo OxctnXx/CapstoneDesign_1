@@ -185,7 +185,7 @@
     }
 
     .answer-grid {
-        grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
         margin-top: 16px;
     }
 
@@ -193,15 +193,54 @@
         border: 1px solid #dbe6f0;
         border-radius: 12px;
         padding: 8px;
-        text-align: center;
         font-size: 13px;
+        background: #fff;
     }
 
     .answer-item strong {
         display: block;
         font-size: 12px;
         color: #627486;
-        margin-bottom: 3px;
+        margin-bottom: 4px;
+    }
+
+    .answer-item span,
+    .answer-item em {
+        display: block;
+        line-height: 1.45;
+        font-style: normal;
+    }
+
+    .answer-item em {
+        margin-top: 5px;
+        font-weight: 700;
+    }
+
+    .answer-item.correct {
+        border-color: #b9e2c5;
+        background: #f4fbf6;
+    }
+
+    .answer-item.correct em {
+        color: #0b6b3a;
+    }
+
+    .answer-item.wrong {
+        border-color: #f6c89a;
+        background: #fff8f1;
+    }
+
+    .answer-item.wrong em {
+        color: #9a5200;
+    }
+
+    .answer-item.unanswered {
+        border-color: #d9e2ec;
+        background: #f8fbff;
+    }
+
+    .answer-item.unanswered em {
+        color: #627486;
     }
 
     .objective-box {
@@ -466,6 +505,15 @@
     let currentRecord = null;
     let subjectiveResults = {};
 
+    function answerStatusLabel(status) {
+        const labels = {
+            correct: '정답',
+            wrong: '오답',
+            unanswered: '미응답'
+        };
+        return labels[status] || status || '-';
+    }
+
     function openDetail(record) {
         currentRecord = record;
         document.getElementById('detailModal').style.display = 'flex';
@@ -519,13 +567,21 @@
         attachZoomHandlers(document.getElementById('imageGrid'));
         renderSubjectiveGrid(record);
 
-        const answers = Object.entries(record.answers || {}).sort((a, b) => Number(a[0]) - Number(b[0]));
-        document.getElementById('answerGrid').innerHTML = answers.map(([question, answer]) => `
-            <div class="answer-item">
-                <strong>Q${question}</strong>
-                <span>${answer || '-'}</span>
+        const answerRows = (record.answer_rows || []).slice().sort((a, b) => Number(a.question_number) - Number(b.question_number));
+        document.getElementById('answerGrid').innerHTML = answerRows.length ? answerRows.map(row => `
+            <div class="answer-item ${escapeHtml(row.status || 'unanswered')}">
+                <strong>Q${escapeHtml(row.question_number)}</strong>
+                <span>작성: ${escapeHtml(row.student_answer || '-')}</span>
+                <span>정답: ${escapeHtml(row.correct_answer || '-')}</span>
+                <em>${escapeHtml(answerStatusLabel(row.status))}</em>
             </div>
-        `).join('');
+        `).join('') : `
+            <div class="answer-item unanswered">
+                <strong>답안 없음</strong>
+                <span>-</span>
+                <em>미기록</em>
+            </div>
+        `;
     }
 
     function closeDetail() {
@@ -678,6 +734,15 @@
             name: '이름 필드'
         };
         return labels[field] || field;
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 
     function attachZoomHandlers(root) {
